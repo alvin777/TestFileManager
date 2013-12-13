@@ -7,6 +7,17 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		CE8A4146185B1FD700723E8E /* ResourcesManager.cpp in Sources */ = {isa = PBXBuildFile; fileRef = CE8A4144185B1FD700723E8E /* ResourcesManager.cpp */; };
+		CE8A4147185B1FD700723E8E /* ResourcesManager.cpp in Sources */ = {isa = PBXBuildFile; fileRef = CE8A4144185B1FD700723E8E /* ResourcesManager.cpp */; };
+		CE8A4149185B24A400723E8E /* test.txt in Resources */ = {isa = PBXBuildFile; fileRef = CE8A4148185B24A400723E8E /* test.txt */; };
+		CE8A414A185B268F00723E8E /* test.txt in Resources */ = {isa = PBXBuildFile; fileRef = CE8A4148185B24A400723E8E /* test.txt */; };
+		CE8A414C185B37E400723E8E /* archive1.zip in Resources */ = {isa = PBXBuildFile; fileRef = CE8A414B185B37E400723E8E /* archive1.zip */; };
+		CE8A414D185B37E400723E8E /* archive1.zip in Resources */ = {isa = PBXBuildFile; fileRef = CE8A414B185B37E400723E8E /* archive1.zip */; };
+		CE8A414F185B3A1400723E8E /* libz.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = CE8A414E185B3A1400723E8E /* libz.dylib */; };
+		CE8A4159185B3CF600723E8E /* ioapi.c in Sources */ = {isa = PBXBuildFile; fileRef = CE8A4155185B3CF600723E8E /* ioapi.c */; };
+		CE8A415A185B3CF600723E8E /* ioapi.c in Sources */ = {isa = PBXBuildFile; fileRef = CE8A4155185B3CF600723E8E /* ioapi.c */; };
+		CE8A415B185B3CF600723E8E /* unzip.c in Sources */ = {isa = PBXBuildFile; fileRef = CE8A4157185B3CF600723E8E /* unzip.c */; };
+		CE8A415C185B3CF600723E8E /* unzip.c in Sources */ = {isa = PBXBuildFile; fileRef = CE8A4157185B3CF600723E8E /* unzip.c */; };
 		CEF6F8E5185A10D50021E537 /* UIKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CEF6F8E4185A10D50021E537 /* UIKit.framework */; };
 		CEF6F8E7185A10D50021E537 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CEF6F8E6185A10D50021E537 /* Foundation.framework */; };
 		CEF6F8E9185A10D50021E537 /* CoreGraphics.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CEF6F8E8185A10D50021E537 /* CoreGraphics.framework */; };
@@ -20,7 +31,7 @@
 		CEF6F904185A10D50021E537 /* UIKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CEF6F8E4185A10D50021E537 /* UIKit.framework */; };
 		CEF6F905185A10D50021E537 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CEF6F8E6185A10D50021E537 /* Foundation.framework */; };
 		CEF6F90D185A10D50021E537 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = CEF6F90B185A10D50021E537 /* InfoPlist.strings */; };
-		CEF6F910185A10D50021E537 /* TestFileManagerTests.m in Sources */ = {isa = PBXBuildFile; fileRef = CEF6F90F185A10D50021E537 /* TestFileManagerTests.m */; };
+		CEF6F910185A10D50021E537 /* TestFileManagerTests.mm in Sources */ = {isa = PBXBuildFile; fileRef = CEF6F90F185A10D50021E537 /* TestFileManagerTests.mm */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -34,6 +45,15 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		CE8A4144185B1FD700723E8E /* ResourcesManager.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = ResourcesManager.cpp; sourceTree = "<group>"; };
+		CE8A4145185B1FD700723E8E /* ResourcesManager.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ResourcesManager.h; sourceTree = "<group>"; };
+		CE8A4148185B24A400723E8E /* test.txt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = test.txt; sourceTree = "<group>"; };
+		CE8A414B185B37E400723E8E /* archive1.zip */ = {isa = PBXFileReference; lastKnownFileType = archive.zip; path = archive1.zip; sourceTree = "<group>"; };
+		CE8A414E185B3A1400723E8E /* libz.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libz.dylib; path = usr/lib/libz.dylib; sourceTree = SDKROOT; };
+		CE8A4155185B3CF600723E8E /* ioapi.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = ioapi.c; sourceTree = "<group>"; };
+		CE8A4156185B3CF600723E8E /* ioapi.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ioapi.h; sourceTree = "<group>"; };
+		CE8A4157185B3CF600723E8E /* unzip.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = unzip.c; sourceTree = "<group>"; };
+		CE8A4158185B3CF600723E8E /* unzip.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = unzip.h; sourceTree = "<group>"; };
 		CEF6F8E1185A10D50021E537 /* TestFileManager.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TestFileManager.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		CEF6F8E4185A10D50021E537 /* UIKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UIKit.framework; path = System/Library/Frameworks/UIKit.framework; sourceTree = SDKROOT; };
 		CEF6F8E6185A10D50021E537 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = System/Library/Frameworks/Foundation.framework; sourceTree = SDKROOT; };
@@ -52,7 +72,7 @@
 		CEF6F90A185A10D50021E537 /* TestFileManagerTests-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "TestFileManagerTests-Info.plist"; sourceTree = "<group>"; };
 		CEF6F90C185A10D50021E537 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		CEF6F90E185A10D50021E537 /* TestFileManagerTests.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = TestFileManagerTests.h; sourceTree = "<group>"; };
-		CEF6F90F185A10D50021E537 /* TestFileManagerTests.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = TestFileManagerTests.m; sourceTree = "<group>"; };
+		CEF6F90F185A10D50021E537 /* TestFileManagerTests.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = TestFileManagerTests.mm; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -60,6 +80,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CE8A414F185B3A1400723E8E /* libz.dylib in Frameworks */,
 				CEF6F8E5185A10D50021E537 /* UIKit.framework in Frameworks */,
 				CEF6F8E7185A10D50021E537 /* Foundation.framework in Frameworks */,
 				CEF6F8E9185A10D50021E537 /* CoreGraphics.framework in Frameworks */,
@@ -79,6 +100,17 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		CE8A4154185B3CF600723E8E /* minizip */ = {
+			isa = PBXGroup;
+			children = (
+				CE8A4155185B3CF600723E8E /* ioapi.c */,
+				CE8A4156185B3CF600723E8E /* ioapi.h */,
+				CE8A4157185B3CF600723E8E /* unzip.c */,
+				CE8A4158185B3CF600723E8E /* unzip.h */,
+			);
+			path = minizip;
+			sourceTree = "<group>";
+		};
 		CEF6F8D8185A10D50021E537 = {
 			isa = PBXGroup;
 			children = (
@@ -101,6 +133,7 @@
 		CEF6F8E3185A10D50021E537 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				CE8A414E185B3A1400723E8E /* libz.dylib */,
 				CEF6F8E4185A10D50021E537 /* UIKit.framework */,
 				CEF6F8E6185A10D50021E537 /* Foundation.framework */,
 				CEF6F8E8185A10D50021E537 /* CoreGraphics.framework */,
@@ -115,6 +148,9 @@
 				CEF6F8F3185A10D50021E537 /* AppDelegate.h */,
 				CEF6F8F4185A10D50021E537 /* AppDelegate.m */,
 				CEF6F8EB185A10D50021E537 /* Supporting Files */,
+				CE8A4145185B1FD700723E8E /* ResourcesManager.h */,
+				CE8A4144185B1FD700723E8E /* ResourcesManager.cpp */,
+				CE8A4154185B3CF600723E8E /* minizip */,
 			);
 			path = TestFileManager;
 			sourceTree = "<group>";
@@ -137,7 +173,7 @@
 			isa = PBXGroup;
 			children = (
 				CEF6F90E185A10D50021E537 /* TestFileManagerTests.h */,
-				CEF6F90F185A10D50021E537 /* TestFileManagerTests.m */,
+				CEF6F90F185A10D50021E537 /* TestFileManagerTests.mm */,
 				CEF6F909185A10D50021E537 /* Supporting Files */,
 			);
 			path = TestFileManagerTests;
@@ -148,6 +184,8 @@
 			children = (
 				CEF6F90A185A10D50021E537 /* TestFileManagerTests-Info.plist */,
 				CEF6F90B185A10D50021E537 /* InfoPlist.strings */,
+				CE8A4148185B24A400723E8E /* test.txt */,
+				CE8A414B185B37E400723E8E /* archive1.zip */,
 			);
 			name = "Supporting Files";
 			sourceTree = "<group>";
@@ -227,6 +265,8 @@
 				CEF6F8F7185A10D50021E537 /* Default.png in Resources */,
 				CEF6F8F9185A10D50021E537 /* Default@2x.png in Resources */,
 				CEF6F8FB185A10D50021E537 /* Default-568h@2x.png in Resources */,
+				CE8A414A185B268F00723E8E /* test.txt in Resources */,
+				CE8A414C185B37E400723E8E /* archive1.zip in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -235,6 +275,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				CEF6F90D185A10D50021E537 /* InfoPlist.strings in Resources */,
+				CE8A4149185B24A400723E8E /* test.txt in Resources */,
+				CE8A414D185B37E400723E8E /* archive1.zip in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -263,6 +305,9 @@
 			files = (
 				CEF6F8F1185A10D50021E537 /* main.m in Sources */,
 				CEF6F8F5185A10D50021E537 /* AppDelegate.m in Sources */,
+				CE8A4146185B1FD700723E8E /* ResourcesManager.cpp in Sources */,
+				CE8A4159185B3CF600723E8E /* ioapi.c in Sources */,
+				CE8A415B185B3CF600723E8E /* unzip.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -270,7 +315,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				CEF6F910185A10D50021E537 /* TestFileManagerTests.m in Sources */,
+				CEF6F910185A10D50021E537 /* TestFileManagerTests.mm in Sources */,
+				CE8A4147185B1FD700723E8E /* ResourcesManager.cpp in Sources */,
+				CE8A415A185B3CF600723E8E /* ioapi.c in Sources */,
+				CE8A415C185B3CF600723E8E /* unzip.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -331,6 +379,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 6.1;
 				ONLY_ACTIVE_ARCH = YES;
+				OTHER_LDFLAGS = "-lz";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -356,6 +405,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 6.1;
 				OTHER_CFLAGS = "-DNS_BLOCK_ASSERTIONS=1";
+				OTHER_LDFLAGS = "-lz";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VALIDATE_PRODUCT = YES;
@@ -437,6 +487,7 @@
 				CEF6F915185A10D50021E537 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
 		};
 		CEF6F916185A10D50021E537 /* Build configuration list for PBXNativeTarget "TestFileManagerTests" */ = {
 			isa = XCConfigurationList;
@@ -445,6 +496,7 @@
 				CEF6F918185A10D50021E537 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
 	};
