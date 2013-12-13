@@ -43,8 +43,8 @@
     char Buffer[5];
     memset(Buffer, 0, sizeof(Buffer));
     int bytesRead = ResourcesManager::sharedManager()->readData("test.txt", &Buffer, sizeof(Buffer));
-    STAssertEquals(4, bytesRead, @"");
-    STAssertEqualObjects(@"test", @(Buffer), @"");
+    STAssertEquals(bytesRead, 4, @"");
+    STAssertEqualObjects(@(Buffer), @"test", @"");
 }
 
 - (void)testReadCompressedFileInZip
@@ -53,8 +53,43 @@
     
     char Buffer[5] = {0};
     int bytesRead = ResourcesManager::sharedManager()->readData("test_compressed.txt", &Buffer, sizeof(Buffer));
-    STAssertEquals(4, bytesRead, @"");
-    STAssertEqualObjects(@"test", @(Buffer), @"");
+    STAssertEquals(bytesRead, 4, @"");
+    STAssertEqualObjects(@(Buffer), @"test", @"");
+}
+
+- (void)testReadFileInFolder
+{
+    ResourcesManager::sharedManager()->addRootFolder([[[NSBundle mainBundle] resourcePath] UTF8String]);
+    
+    char Buffer[100] = {0};
+    ResourcesManager::sharedManager()->readData("res/file_in_folder.txt", &Buffer, sizeof(Buffer));
+    STAssertEqualObjects(@(Buffer), @"file_in_folder", @"");
+
+    int size = ResourcesManager::sharedManager()->readData("file_in_folder.txt", &Buffer, sizeof(Buffer));
+    STAssertTrue(size > 0, @"");
+}
+
+- (void)testReadFileInZipFolder
+{
+    ResourcesManager::sharedManager()->addArchive([[[NSBundle mainBundle] pathForResource:@"archive1" ofType:@"zip"] UTF8String]);
+    
+    char Buffer[100] = {0};
+    ResourcesManager::sharedManager()->readData("res/compressed_file_in_folder.txt", &Buffer, sizeof(Buffer));
+    STAssertEqualObjects(@(Buffer), @"compressed_file_in_folder", @"");
+
+    int size = ResourcesManager::sharedManager()->readData("compressed_file_in_folder.txt", &Buffer, sizeof(Buffer));
+    STAssertTrue(size > 0, @"");
+}
+
+- (void)testReadFileToBuffer
+{
+    ResourcesManager::sharedManager()->addRootFolder([[[NSBundle mainBundle] resourcePath] UTF8String]);
+    
+    size_t bytesRead = 0;
+    auto Buffer = ResourcesManager::sharedManager()->readData("test.txt", &bytesRead);
+    STAssertEquals(bytesRead, (size_t)4, @"");
+    NSString *string = [[NSString alloc] initWithBytes:Buffer.get() length:4 encoding:NSUTF8StringEncoding];
+    STAssertEqualObjects(string, @"test", @"");
 }
 
 //- (void)testReadStoredFileInZip

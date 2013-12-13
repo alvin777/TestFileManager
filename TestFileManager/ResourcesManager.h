@@ -21,7 +21,9 @@ public:
     
     void addRootFolder(const std::string& rootFolder);
     void addArchive(const std::string& archivePath);
-    size_t readData(const char* filename, void* buffer, int size);
+    size_t getSize(const std::string& filename);
+    size_t readData(const std::string& filename, void* buffer, int size);
+    std::unique_ptr<char[]> readData(const std::string& filename, size_t* bytesRead);
     
 private:
     std::unique_ptr<ResourcesManagerImpl> pImpl;
