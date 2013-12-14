@@ -97,6 +97,15 @@ std::string removeExtension(const std::string& filename) {
     return filename.substr(0, lastdot);
 }
 
+std::string getRootFolder(const std::string& filePath) {
+    size_t firstSlash = filePath.find_first_of('/');
+    if (firstSlash == std::string::npos) return filePath;
+    
+    // TODO: support paths starting with slash
+    
+    return filePath.substr(0, firstSlash);
+}
+
 long getFileSize(const std::string& filePath)
 {
     struct stat stat_buf;
@@ -126,6 +135,8 @@ ResourcesManager::ResourcesManager()
 void ResourcesManager::reset() {
     pImpl->rootFoldersList.clear();
     pImpl->filenameToRecordMap.clear();
+    pImpl->languageId.clear();
+    pImpl->relativeFolderToLanguageIdMap.clear();
 }
 
 void ResourcesManager::addRootFolder(const std::string& rootFolder) {
@@ -146,11 +157,10 @@ void ResourcesManager::setCurrentLanguage(const std::string& languageId) {
 //
 
 void ResourcesManagerImpl::addFolderRecursive(const std::string& rootFolder, const std::string& relativeFolder) {
-    DIR *dp;
-    struct dirent *ep;
-    dp = opendir(combine({rootFolder, relativeFolder}).c_str());
+    DIR *dp = opendir(combine({rootFolder, relativeFolder}).c_str());
+    if (!dp) return;
     
-    if (dp == NULL) return;
+    struct dirent *ep;
     while ((ep = readdir(dp))) {
         if (ep->d_name[0] == '.') continue;
         
@@ -191,12 +201,12 @@ size_t ResourcesManagerImpl::readDataFromRegularFile(const std::string& filePath
 // zip archive methods
 //
 
-void ResourcesManager::addArchive(const std::string& archivePath) {
-    unzFile zipFile = NULL;
+void ResourcesManager::addArchive(const std::string& archivePath, const std::string& rootFolder /* = "" */) {
+    unzFile zipFile = nullptr;
     
     try {
         unzFile zipFile = unzOpen(archivePath.c_str());
-        if (zipFile == NULL) throw std::exception();
+        if (!zipFile) throw std::exception();
 
         char filename[256] = {0};
         unz_file_info64 fileInfo;
@@ -212,13 +222,24 @@ void ResourcesManager::addArchive(const std::string& archivePath) {
                 throw std::exception();
             }
             
-            FileRecord fileRecord;
-            fileRecord.filename    = filename;
-            fileRecord.fileType    = CompressedFile;
-            fileRecord.size        = fileInfo.uncompressed_size;
-            fileRecord.zipFilePath = archivePath;
-            fileRecord.zipFilePos  = zipFilePos;
-            pImpl->filenameToRecordMap[pImpl->getFilenameId(filename)].push_back(fileRecord);
+            // skip folders and files outside specified folder
+            bool shouldAddRecord = true;
+            std::string filenameString = filename;
+            if (/*S_ISDIR(fileInfo.external_fa) || */
+                (!rootFolder.empty() &&
+                 getRootFolder(filenameString) != rootFolder)) {
+                shouldAddRecord = false; 
+            }
+            
+            if (shouldAddRecord) {
+                FileRecord fileRecord;
+                fileRecord.filename    = filenameString;
+                fileRecord.fileType    = CompressedFile;
+                fileRecord.size        = fileInfo.uncompressed_size;
+                fileRecord.zipFilePath = archivePath;
+                fileRecord.zipFilePos  = zipFilePos;
+                pImpl->filenameToRecordMap[pImpl->getFilenameId(filename)].push_back(fileRecord);
+            }
             
             ret = unzGoToNextFile2(zipFile, &fileInfo, filename, sizeof(filename), NULL, 0, NULL, 0);
             if (ret == UNZ_END_OF_LIST_OF_FILE) break;
@@ -235,10 +256,10 @@ void ResourcesManager::addArchive(const std::string& archivePath) {
 
 size_t ResourcesManagerImpl::readDataFromCompressedFile(const FileRecord& fileRecord, void* buffer, int size) {
     
-    unzFile zipFile = NULL;
+    unzFile zipFile = nullptr;
     try {
         unzFile zipFile = unzOpen(fileRecord.zipFilePath.c_str());
-        if (zipFile == NULL) throw std::exception();
+        if (!zipFile) throw std::exception();
         
         unz_file_pos file_pos = fileRecord.zipFilePos;
         int ret = unzGoToFilePos(zipFile, &file_pos);
@@ -281,7 +302,7 @@ FileRecord* ResourcesManagerImpl::findFileRecord(const std::string& filename) {
     std::string filenameId = getFilenameId(filename);
     
     auto it = filenameToRecordMap.find(filenameId);
-    if (it == filenameToRecordMap.end()) return NULL;
+    if (it == filenameToRecordMap.end()) return nullptr;
     
     // if language is not set - return non-specific fie record
     // if language is set return language-specific record if exists and non-specific otherwise
@@ -291,7 +312,7 @@ FileRecord* ResourcesManagerImpl::findFileRecord(const std::string& filename) {
             if (fileRecord.languageId.empty()) return &fileRecord;
         }
     } else {
-        FileRecord* nonLanguageSpecificFileRecord = NULL;
+        FileRecord* nonLanguageSpecificFileRecord = nullptr;
         for (auto& fileRecord : it->second) {
             if (fileRecord.languageId.empty()) nonLanguageSpecificFileRecord = &fileRecord;
             
@@ -302,7 +323,7 @@ FileRecord* ResourcesManagerImpl::findFileRecord(const std::string& filename) {
         return nonLanguageSpecificFileRecord;
     }
     
-    return NULL;
+    return nullptr;
 }
 
 size_t ResourcesManagerImpl::readData(const FileRecord& fileRecord, void* buffer, int size) {
@@ -319,7 +340,7 @@ size_t ResourcesManagerImpl::readData(const FileRecord& fileRecord, void* buffer
 size_t ResourcesManager::readData(const std::string& filename, void* buffer, int size) {
     
     FileRecord* fileRecord = pImpl->findFileRecord(filename);
-    if (fileRecord == NULL) return 0;
+    if (!fileRecord) return 0;
     
     return pImpl->readData(*fileRecord, buffer, size);
 }
@@ -327,7 +348,10 @@ size_t ResourcesManager::readData(const std::string& filename, void* buffer, int
 std::unique_ptr<char[]> ResourcesManager::readData(const std::string& filename, size_t* bytesRead) {
     
     FileRecord* fileRecord = pImpl->findFileRecord(filename);
-    if (fileRecord == NULL) return 0;
+    if (!fileRecord) {
+        *bytesRead = 0;
+        return nullptr;
+    }
     
     std::unique_ptr<char[]> buffer(new char[fileRecord->size]);
     *bytesRead = pImpl->readData(*fileRecord, buffer.get(), fileRecord->size);
@@ -338,7 +362,7 @@ std::unique_ptr<char[]> ResourcesManager::readData(const std::string& filename, 
 
 size_t ResourcesManager::getSize(const std::string& filename) {
     FileRecord* fileRecord = pImpl->findFileRecord(filename);
-    if (fileRecord == NULL) return 0;
+    if (!fileRecord) return 0;
 
     return fileRecord->size;
 }

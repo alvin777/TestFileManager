@@ -20,7 +20,7 @@ public:
     void reset();
     
     void addRootFolder(const std::string& rootFolder);
-    void addArchive(const std::string& archivePath);
+    void addArchive(const std::string& archivePath, const std::string& rootFolder = "");
     void addLanguageFolder(const std::string& languageId, const std::string& languageFolder);
     void setCurrentLanguage(const std::string& languageId);
     size_t getSize(const std::string& filename);

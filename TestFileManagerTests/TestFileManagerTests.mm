@@ -10,6 +10,12 @@
 
 #include "ResourcesManager.h"
 
+NSString *BufferToString(const char* buffer, size_t size) {
+    if (!buffer) return @"";
+    
+    return [[NSString alloc] initWithBytes:buffer length:size encoding:NSUTF8StringEncoding];
+};
+
 @implementation TestFileManagerTests
 
 - (void)setUp
@@ -103,14 +109,26 @@
     ResourcesManager::sharedManager()->setCurrentLanguage("ru");
     auto buffer = ResourcesManager::sharedManager()->readData("file_in_folder.txt", &bytesRead);
     STAssertTrue(bytesRead > 0, @"");
-    NSString *string = [[NSString alloc] initWithBytes:buffer.get() length:bytesRead encoding:NSUTF8StringEncoding];
-    STAssertEqualObjects(string, @"файл в папке", @"");
+    STAssertEqualObjects(BufferToString(buffer.get(), bytesRead), @"файл в папке", @"");
 
     ResourcesManager::sharedManager()->setCurrentLanguage("es");
     buffer = ResourcesManager::sharedManager()->readData("file_in_folder.txt", &bytesRead);
     STAssertTrue(bytesRead > 0, @"");
-    string = [[NSString alloc] initWithBytes:buffer.get() length:bytesRead encoding:NSUTF8StringEncoding];
-    STAssertEqualObjects(string, @"un \"file\" es en papel", @"");
+    STAssertEqualObjects(BufferToString(buffer.get(), bytesRead), @"un \"file\" es en papel", @"");
+}
+
+// apk schema
+- (void)testResFolderInZip
+{
+    ResourcesManager::sharedManager()->addArchive([[[NSBundle mainBundle] pathForResource:@"res" ofType:@"zip"] UTF8String], "res");
+    
+    size_t bytesRead = 0;
+    auto buffer = ResourcesManager::sharedManager()->readData("file_in_folder.txt", &bytesRead);
+    STAssertTrue(bytesRead > 0, @"");
+    STAssertEqualObjects(BufferToString(buffer.get(), bytesRead), @"file_in_folder", @"");
+
+    buffer = ResourcesManager::sharedManager()->readData("badfile.txt", &bytesRead);
+    STAssertEquals(bytesRead, (size_t)0, @"");
 }
 
 //- (void)testReadStoredFileInZip
