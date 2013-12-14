@@ -40,32 +40,32 @@
 {
     ResourcesManager::sharedManager()->addRootFolder([[[NSBundle mainBundle] resourcePath] UTF8String]);
     
-    char Buffer[5];
-    memset(Buffer, 0, sizeof(Buffer));
-    int bytesRead = ResourcesManager::sharedManager()->readData("test.txt", &Buffer, sizeof(Buffer));
+    char buffer[5];
+    memset(buffer, 0, sizeof(buffer));
+    int bytesRead = ResourcesManager::sharedManager()->readData("test.txt", &buffer, sizeof(buffer));
     STAssertEquals(bytesRead, 4, @"");
-    STAssertEqualObjects(@(Buffer), @"test", @"");
+    STAssertEqualObjects(@(buffer), @"test", @"");
 }
 
 - (void)testReadCompressedFileInZip
 {
     ResourcesManager::sharedManager()->addArchive([[[NSBundle mainBundle] pathForResource:@"archive1" ofType:@"zip"] UTF8String]);
     
-    char Buffer[5] = {0};
-    int bytesRead = ResourcesManager::sharedManager()->readData("test_compressed.txt", &Buffer, sizeof(Buffer));
+    char buffer[5] = {0};
+    int bytesRead = ResourcesManager::sharedManager()->readData("test_compressed.txt", &buffer, sizeof(buffer));
     STAssertEquals(bytesRead, 4, @"");
-    STAssertEqualObjects(@(Buffer), @"test", @"");
+    STAssertEqualObjects(@(buffer), @"test", @"");
 }
 
 - (void)testReadFileInFolder
 {
-    ResourcesManager::sharedManager()->addRootFolder([[[NSBundle mainBundle] resourcePath] UTF8String]);
+    ResourcesManager::sharedManager()->addRootFolder([[[[NSBundle mainBundle] resourcePath] stringByAppendingPathComponent:@"res"] UTF8String]);
     
-    char Buffer[100] = {0};
-    ResourcesManager::sharedManager()->readData("res/file_in_folder.txt", &Buffer, sizeof(Buffer));
-    STAssertEqualObjects(@(Buffer), @"file_in_folder", @"");
+    char buffer[100] = {0};
+    ResourcesManager::sharedManager()->readData("res/file_in_folder.txt", &buffer, sizeof(buffer));
+    STAssertEqualObjects(@(buffer), @"file_in_folder", @"");
 
-    int size = ResourcesManager::sharedManager()->readData("file_in_folder.txt", &Buffer, sizeof(Buffer));
+    int size = ResourcesManager::sharedManager()->readData("file_in_folder.txt", &buffer, sizeof(buffer));
     STAssertTrue(size > 0, @"");
 }
 
@@ -73,33 +73,54 @@
 {
     ResourcesManager::sharedManager()->addArchive([[[NSBundle mainBundle] pathForResource:@"archive1" ofType:@"zip"] UTF8String]);
     
-    char Buffer[100] = {0};
-    ResourcesManager::sharedManager()->readData("res/compressed_file_in_folder.txt", &Buffer, sizeof(Buffer));
-    STAssertEqualObjects(@(Buffer), @"compressed_file_in_folder", @"");
+    char buffer[100] = {0};
+    ResourcesManager::sharedManager()->readData("res/compressed_file_in_folder.txt", &buffer, sizeof(buffer));
+    STAssertEqualObjects(@(buffer), @"compressed_file_in_folder", @"");
 
-    int size = ResourcesManager::sharedManager()->readData("compressed_file_in_folder.txt", &Buffer, sizeof(Buffer));
+    int size = ResourcesManager::sharedManager()->readData("compressed_file_in_folder.txt", &buffer, sizeof(buffer));
     STAssertTrue(size > 0, @"");
 }
 
-- (void)testReadFileToBuffer
+- (void)testReadFileTobuffer
 {
     ResourcesManager::sharedManager()->addRootFolder([[[NSBundle mainBundle] resourcePath] UTF8String]);
     
     size_t bytesRead = 0;
-    auto Buffer = ResourcesManager::sharedManager()->readData("test.txt", &bytesRead);
+    auto buffer = ResourcesManager::sharedManager()->readData("test.txt", &bytesRead);
     STAssertEquals(bytesRead, (size_t)4, @"");
-    NSString *string = [[NSString alloc] initWithBytes:Buffer.get() length:4 encoding:NSUTF8StringEncoding];
+    NSString *string = [[NSString alloc] initWithBytes:buffer.get() length:bytesRead encoding:NSUTF8StringEncoding];
     STAssertEqualObjects(string, @"test", @"");
+}
+
+- (void)testReadLocalizedFile
+{
+    ResourcesManager::sharedManager()->addLanguageFolder("ru", "localized/ru");
+    ResourcesManager::sharedManager()->addLanguageFolder("es", "localized/es");
+    ResourcesManager::sharedManager()->addRootFolder([[[[NSBundle mainBundle] resourcePath] stringByAppendingPathComponent:@"lang_res"] UTF8String]);
+    
+    size_t bytesRead = 0;
+
+    ResourcesManager::sharedManager()->setCurrentLanguage("ru");
+    auto buffer = ResourcesManager::sharedManager()->readData("file_in_folder.txt", &bytesRead);
+    STAssertTrue(bytesRead > 0, @"");
+    NSString *string = [[NSString alloc] initWithBytes:buffer.get() length:bytesRead encoding:NSUTF8StringEncoding];
+    STAssertEqualObjects(string, @"файл в папке", @"");
+
+    ResourcesManager::sharedManager()->setCurrentLanguage("es");
+    buffer = ResourcesManager::sharedManager()->readData("file_in_folder.txt", &bytesRead);
+    STAssertTrue(bytesRead > 0, @"");
+    string = [[NSString alloc] initWithBytes:buffer.get() length:bytesRead encoding:NSUTF8StringEncoding];
+    STAssertEqualObjects(string, @"un \"file\" es en papel", @"");
 }
 
 //- (void)testReadStoredFileInZip
 //{
 //    ResourcesManager::sharedManager()->addArchive([[[NSBundle mainBundle] pathForResource:@"archive1" ofType:@"zip"] UTF8String])
 //    
-//    char Buffer[4];
-//    int bytesRead = ResourcesManager::sharedManager()->readData("test_stored.txt", &Buffer, sizeof(Buffer));
+//    char buffer[4];
+//    int bytesRead = ResourcesManager::sharedManager()->readData("test_stored.txt", &buffer, sizeof(buffer));
 //    STAssertEquals(bytesRead, 4, @"");
-//    STAssertEquals(Buffer, "test", @"");
+//    STAssertEquals(buffer, "test", @"");
 //}
 //
 //- (void)testReadStoredStreamInZip
@@ -108,14 +129,14 @@
 //    
 //    Stream stream = ResourcesManager::sharedManager()->getStream("test_stored.txt");
 //    STAssertEquals(stream.getSize(), 4, @"");
-//    char Buffer[2];
-//    int bytesRead = stream.readData(&Buffer, sizeof(Buffer));
+//    char buffer[2];
+//    int bytesRead = stream.readData(&buffer, sizeof(buffer));
 //    STAssertEquals(bytesRead, 2, @"");
-//    STAssertEquals(Buffer, "te", @"");
+//    STAssertEquals(buffer, "te", @"");
 //    
-//    bytesRead = stream.readData(&Buffer, sizeof(Buffer));
+//    bytesRead = stream.readData(&buffer, sizeof(buffer));
 //    STAssertEquals(bytesRead, 2, @"");
-//    STAssertEquals(Buffer, "st", @"");
+//    STAssertEquals(buffer, "st", @"");
 //}
 //
 //- (void)testReadSmallScreenFileFromFolder
@@ -125,10 +146,10 @@
 //    ResourcesManager::sharedManager()->setTagFolder("screen-small", "small");
 //    ResourcesManager::sharedManager()->activateTag("small");
 //    
-//    char Buffer[100];
-//    int bytesRead = ResourcesManager::sharedManager()->readData("test.txt", &Buffer, sizeof(Buffer));
+//    char buffer[100];
+//    int bytesRead = ResourcesManager::sharedManager()->readData("test.txt", &buffer, sizeof(buffer));
 //    STAssertEquals(bytesRead, strlen("small-screen test"), @"");
-//    STAssertEquals(Buffer, "small-screen test", @"");
+//    STAssertEquals(buffer, "small-screen test", @"");
 //}
 //
 //- (void)testReadSmallScreenFileWithSuffix
@@ -138,10 +159,10 @@
 //    ResourcesManager::sharedManager()->setTagSuffix("small", "small");
 //    ResourcesManager::sharedManager()->activateTag("small");
 //    
-//    char Buffer[100];
-//    int bytesRead = ResourcesManager::sharedManager()->readData("test.txt", &Buffer, sizeof(Buffer));
+//    char buffer[100];
+//    int bytesRead = ResourcesManager::sharedManager()->readData("test.txt", &buffer, sizeof(buffer));
 //    STAssertEquals(bytesRead, strlen("small-screen test"), @"");
-//    STAssertEquals(Buffer, "small-screen test", @"");
+//    STAssertEquals(buffer, "small-screen test", @"");
 //}
 
 @end

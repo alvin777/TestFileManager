@@ -16,6 +16,7 @@
 
 #include <vector>
 #include <map>
+#include <sstream>
 
 #include "unzip.h"
 
@@ -24,12 +25,14 @@ enum FileType {
 };
 
 struct FileRecord {
-    std::string filename;
+    std::string filename;     // Demo.png (case as on disk)
     FileType fileType;
     size_t size;
+    std::string languageId;
     
     // regular file
-    std::string filePath;
+    std::string filePath;     // /Users/user/../<AppId>/res/Textures/Demo.png
+    std::string relativePath; // res/textures/Demo.png
     
     // zip
     std::string zipFilePath;
@@ -40,16 +43,27 @@ class ResourcesManagerImpl {
 private:
     friend class ResourcesManager;
     
-    std::vector<std::string> rootFoldersList;
-    std::map<std::string, FileRecord> filenameToRecordMap;
+    typedef std::vector<FileRecord> FileRecordList;
     
-    std::string getFilePath(const std::string& filename);
-    void addFolderRecursive(const std::string& folder);
+    std::vector<std::string> rootFoldersList;
+    std::map<std::string, FileRecordList> filenameToRecordMap;
+    std::string languageId;
+    std::map<std::string, std::string> relativeFolderToLanguageIdMap;
+    
+    void addFolderRecursive(const std::string& folder, const std::string& relativeFolder);
+    
+    size_t readData(const FileRecord& fileRecord, void* buffer, int size);
     size_t readDataFromRegularFile(const std::string& filePath, void* buffer, int size);
     size_t readDataFromCompressedFile(const FileRecord& fileRecord, void* buffer, int size);
     
     std::string getFilenameId(const std::string& filename);
+    
+    FileRecord* findFileRecord(const std::string& filename);
 };
+
+//
+// utility functions
+//
 
 std::string basename(const std::string& path) {
     std::string basename;
@@ -61,6 +75,20 @@ std::string basename(const std::string& path) {
         basename = path;
     
     return basename;
+}
+
+std::string combine(const std::initializer_list<std::string>& pathComponentsList) {
+    std::stringstream out;
+    for (auto& pathComponent : pathComponentsList) {
+        if (!pathComponent.empty())
+            out << pathComponent << "/";
+    }
+    
+    std::string outString = out.str();
+    
+    if (outString.size() == 0) return outString;
+    
+    return outString.substr(0, outString.size() - 1);
 }
 
 std::string removeExtension(const std::string& filename) {
@@ -75,6 +103,10 @@ long getFileSize(const std::string& filePath)
     int rc = stat(filePath.c_str(), &stat_buf);
     return rc == 0 ? stat_buf.st_size : -1;
 }
+
+//
+// ResourcesManager
+//
 
 ResourcesManager* ResourcesManager::sharedManager() {
     static ResourcesManager* manager = nullptr;
@@ -98,32 +130,66 @@ void ResourcesManager::reset() {
 
 void ResourcesManager::addRootFolder(const std::string& rootFolder) {
     pImpl->rootFoldersList.push_back(rootFolder);
-    pImpl->addFolderRecursive(rootFolder);
+    pImpl->addFolderRecursive(rootFolder, "");
 }
 
-void ResourcesManagerImpl::addFolderRecursive(const std::string& folder) {
+void ResourcesManager::addLanguageFolder(const std::string& languageId, const std::string& languageFolder) {
+    pImpl->relativeFolderToLanguageIdMap[languageFolder] = languageId;
+}
+
+void ResourcesManager::setCurrentLanguage(const std::string& languageId) {
+    pImpl->languageId = languageId;
+}
+
+//
+// filesystem methods
+//
+
+void ResourcesManagerImpl::addFolderRecursive(const std::string& rootFolder, const std::string& relativeFolder) {
     DIR *dp;
     struct dirent *ep;
-    dp = opendir(folder.c_str());
+    dp = opendir(combine({rootFolder, relativeFolder}).c_str());
     
     if (dp == NULL) return;
     while ((ep = readdir(dp))) {
         if (ep->d_name[0] == '.') continue;
         
         if (ep->d_type == DT_DIR) {
-            addFolderRecursive(folder + "/" + ep->d_name);
+            addFolderRecursive(rootFolder, combine({relativeFolder, ep->d_name}));
         } else {
             FileRecord fileRecord;
             fileRecord.filename    = ep->d_name;
             fileRecord.fileType    = RegularFile;
-            fileRecord.filePath    = folder + "/" + ep->d_name;
+            fileRecord.filePath    = combine({rootFolder, relativeFolder, ep->d_name});
             fileRecord.size        = getFileSize(fileRecord.filePath);
-            filenameToRecordMap[getFilenameId(fileRecord.filename)] = fileRecord;
+            
+            auto it = relativeFolderToLanguageIdMap.find(relativeFolder);
+            if (it != relativeFolderToLanguageIdMap.end()) {
+                fileRecord.languageId = it->second;
+            }
+            
+            filenameToRecordMap[getFilenameId(fileRecord.filename)].push_back(fileRecord);
         }
     }
     
     closedir(dp);
 }
+
+size_t ResourcesManagerImpl::readDataFromRegularFile(const std::string& filePath, void* buffer, int size) {
+    FILE* file = fopen(filePath.c_str(), "rb");
+    if (!file) return 0;
+    
+    size_t bytesRead = fread(buffer, 1, size, file);
+    
+    fclose(file);
+    
+    return bytesRead;
+}
+
+
+//
+// zip archive methods
+//
 
 void ResourcesManager::addArchive(const std::string& archivePath) {
     unzFile zipFile = NULL;
@@ -152,7 +218,7 @@ void ResourcesManager::addArchive(const std::string& archivePath) {
             fileRecord.size        = fileInfo.uncompressed_size;
             fileRecord.zipFilePath = archivePath;
             fileRecord.zipFilePos  = zipFilePos;
-            pImpl->filenameToRecordMap[pImpl->getFilenameId(filename)] = fileRecord;
+            pImpl->filenameToRecordMap[pImpl->getFilenameId(filename)].push_back(fileRecord);
             
             ret = unzGoToNextFile2(zipFile, &fileInfo, filename, sizeof(filename), NULL, 0, NULL, 0);
             if (ret == UNZ_END_OF_LIST_OF_FILE) break;
@@ -167,55 +233,6 @@ void ResourcesManager::addArchive(const std::string& archivePath) {
     }
 }
 
-//// should be rewritten to memory cache
-//std::string ResourcesManagerImpl::getFilePath(const std::string& filename) {
-//    for (auto& rootFolder : rootFoldersList) {
-//        std::string filePath = rootFolder + "/" + filename;
-//        
-//        if (access(filePath.c_str(), F_OK) != -1 ) {
-//            return filePath;
-//        }
-//    }
-//    
-//    return filename;
-//}
-
-std::string ResourcesManagerImpl::getFilenameId(const std::string& filename) {
-    std::string filenameId = basename(filename);
-    std::transform(filenameId.begin(), filenameId.end(), filenameId.begin(), ::tolower);
-    filenameId = removeExtension(filenameId);
-    
-    return filenameId;
-}
-
-size_t ResourcesManager::readData(const std::string& filename, void* buffer, int size) {
-    
-    std::string filenameId = pImpl->getFilenameId(filename);
-    
-    auto it = pImpl->filenameToRecordMap.find(filenameId);
-    if (it == pImpl->filenameToRecordMap.end()) return 0;
-    
-    if (it->second.fileType == RegularFile) {
-        return pImpl->readDataFromRegularFile(it->second.filePath, buffer, size);
-    }
-    else if (it->second.fileType == CompressedFile) {
-        return pImpl->readDataFromCompressedFile(it->second, buffer, size);
-    }
-    
-    return 0;
-}
-
-size_t ResourcesManagerImpl::readDataFromRegularFile(const std::string& filePath, void* buffer, int size) {
-    FILE* file = fopen(filePath.c_str(), "rb");
-    if (!file) return 0;
-    
-    size_t bytesRead = fread(buffer, 1, size, file);
-    
-    fclose(file);
-    
-    return bytesRead;
-}
-
 size_t ResourcesManagerImpl::readDataFromCompressedFile(const FileRecord& fileRecord, void* buffer, int size) {
     
     unzFile zipFile = NULL;
@@ -226,7 +243,7 @@ size_t ResourcesManagerImpl::readDataFromCompressedFile(const FileRecord& fileRe
         unz_file_pos file_pos = fileRecord.zipFilePos;
         int ret = unzGoToFilePos(zipFile, &file_pos);
         if (ret != UNZ_OK) throw std::exception();
-
+        
         ret = unzOpenCurrentFile(zipFile);
         if (ret != UNZ_OK) throw std::exception();
         
@@ -244,26 +261,84 @@ size_t ResourcesManagerImpl::readDataFromCompressedFile(const FileRecord& fileRe
         }
         throw;
     }
+    
+    return 0;
+}
+
+//
+// common methods
+//
+
+std::string ResourcesManagerImpl::getFilenameId(const std::string& filename) {
+    std::string filenameId = basename(filename);
+    std::transform(filenameId.begin(), filenameId.end(), filenameId.begin(), ::tolower);
+//    filenameId = removeExtension(filenameId);
+    
+    return filenameId;
+}
+
+FileRecord* ResourcesManagerImpl::findFileRecord(const std::string& filename) {
+    std::string filenameId = getFilenameId(filename);
+    
+    auto it = filenameToRecordMap.find(filenameId);
+    if (it == filenameToRecordMap.end()) return NULL;
+    
+    // if language is not set - return non-specific fie record
+    // if language is set return language-specific record if exists and non-specific otherwise
+    
+    if (languageId.empty()) {
+        for (auto& fileRecord : it->second) {
+            if (fileRecord.languageId.empty()) return &fileRecord;
+        }
+    } else {
+        FileRecord* nonLanguageSpecificFileRecord = NULL;
+        for (auto& fileRecord : it->second) {
+            if (fileRecord.languageId.empty()) nonLanguageSpecificFileRecord = &fileRecord;
+            
+            if (fileRecord.languageId == languageId) {
+                return &fileRecord;
+            }
+        }
+        return nonLanguageSpecificFileRecord;
+    }
+    
+    return NULL;
+}
+
+size_t ResourcesManagerImpl::readData(const FileRecord& fileRecord, void* buffer, int size) {
+    if (fileRecord.fileType == RegularFile) {
+        return readDataFromRegularFile(fileRecord.filePath, buffer, size);
+    }
+    else if (fileRecord.fileType == CompressedFile) {
+        return readDataFromCompressedFile(fileRecord, buffer, size);
+    }
 
     return 0;
 }
 
-size_t ResourcesManager::getSize(const std::string& filename) {
-    std::string filenameId = pImpl->getFilenameId(filename);
+size_t ResourcesManager::readData(const std::string& filename, void* buffer, int size) {
     
-    auto it = pImpl->filenameToRecordMap.find(filenameId);
-    if (it == pImpl->filenameToRecordMap.end()) return -1;
+    FileRecord* fileRecord = pImpl->findFileRecord(filename);
+    if (fileRecord == NULL) return 0;
     
-    return it->second.size;
+    return pImpl->readData(*fileRecord, buffer, size);
 }
 
 std::unique_ptr<char[]> ResourcesManager::readData(const std::string& filename, size_t* bytesRead) {
     
-    size_t size = getSize(filename);
+    FileRecord* fileRecord = pImpl->findFileRecord(filename);
+    if (fileRecord == NULL) return 0;
     
-    std::unique_ptr<char[]> buffer(new char[size]);
-    *bytesRead = readData(filename, buffer.get(), size);
-    if (*bytesRead != size) throw std::exception();
+    std::unique_ptr<char[]> buffer(new char[fileRecord->size]);
+    *bytesRead = pImpl->readData(*fileRecord, buffer.get(), fileRecord->size);
+    if (*bytesRead != fileRecord->size) throw std::exception();
     
     return buffer;
+}
+
+size_t ResourcesManager::getSize(const std::string& filename) {
+    FileRecord* fileRecord = pImpl->findFileRecord(filename);
+    if (fileRecord == NULL) return 0;
+
+    return fileRecord->size;
 }

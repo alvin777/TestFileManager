@@ -21,6 +21,8 @@ public:
     
     void addRootFolder(const std::string& rootFolder);
     void addArchive(const std::string& archivePath);
+    void addLanguageFolder(const std::string& languageId, const std::string& languageFolder);
+    void setCurrentLanguage(const std::string& languageId);
     size_t getSize(const std::string& filename);
     size_t readData(const std::string& filename, void* buffer, int size);
     std::unique_ptr<char[]> readData(const std::string& filename, size_t* bytesRead);
