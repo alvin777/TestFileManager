@@ -24,6 +24,8 @@
 		CEE4BC04185C897400D1FEC3 /* lang_res in Resources */ = {isa = PBXBuildFile; fileRef = CEE4BC02185C897400D1FEC3 /* lang_res */; };
 		CEE4BC06185C97EB00D1FEC3 /* res.zip in Resources */ = {isa = PBXBuildFile; fileRef = CEE4BC05185C97EB00D1FEC3 /* res.zip */; };
 		CEE4BC07185C97EB00D1FEC3 /* res.zip in Resources */ = {isa = PBXBuildFile; fileRef = CEE4BC05185C97EB00D1FEC3 /* res.zip */; };
+		CEE4BC09185C9B9200D1FEC3 /* lang_res.zip in Resources */ = {isa = PBXBuildFile; fileRef = CEE4BC08185C9B9200D1FEC3 /* lang_res.zip */; };
+		CEE4BC0A185C9B9200D1FEC3 /* lang_res.zip in Resources */ = {isa = PBXBuildFile; fileRef = CEE4BC08185C9B9200D1FEC3 /* lang_res.zip */; };
 		CEF6F8E5185A10D50021E537 /* UIKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CEF6F8E4185A10D50021E537 /* UIKit.framework */; };
 		CEF6F8E7185A10D50021E537 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CEF6F8E6185A10D50021E537 /* Foundation.framework */; };
 		CEF6F8E9185A10D50021E537 /* CoreGraphics.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CEF6F8E8185A10D50021E537 /* CoreGraphics.framework */; };
@@ -63,6 +65,7 @@
 		CE8A415D185B51EE00723E8E /* res */ = {isa = PBXFileReference; lastKnownFileType = folder; path = res; sourceTree = "<group>"; };
 		CEE4BC02185C897400D1FEC3 /* lang_res */ = {isa = PBXFileReference; lastKnownFileType = folder; path = lang_res; sourceTree = "<group>"; };
 		CEE4BC05185C97EB00D1FEC3 /* res.zip */ = {isa = PBXFileReference; lastKnownFileType = archive.zip; path = res.zip; sourceTree = "<group>"; };
+		CEE4BC08185C9B9200D1FEC3 /* lang_res.zip */ = {isa = PBXFileReference; lastKnownFileType = archive.zip; path = lang_res.zip; sourceTree = "<group>"; };
 		CEF6F8E1185A10D50021E537 /* TestFileManager.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TestFileManager.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		CEF6F8E4185A10D50021E537 /* UIKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UIKit.framework; path = System/Library/Frameworks/UIKit.framework; sourceTree = SDKROOT; };
 		CEF6F8E6185A10D50021E537 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = System/Library/Frameworks/Foundation.framework; sourceTree = SDKROOT; };
@@ -198,6 +201,7 @@
 				CE8A4148185B24A400723E8E /* test.txt */,
 				CE8A414B185B37E400723E8E /* archive1.zip */,
 				CEE4BC05185C97EB00D1FEC3 /* res.zip */,
+				CEE4BC08185C9B9200D1FEC3 /* lang_res.zip */,
 			);
 			name = res;
 			sourceTree = "<group>";
@@ -282,6 +286,7 @@
 				CE8A415E185B51EE00723E8E /* res in Resources */,
 				CEE4BC03185C897400D1FEC3 /* lang_res in Resources */,
 				CEE4BC06185C97EB00D1FEC3 /* res.zip in Resources */,
+				CEE4BC09185C9B9200D1FEC3 /* lang_res.zip in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -295,6 +300,7 @@
 				CE8A415F185B51EE00723E8E /* res in Resources */,
 				CEE4BC04185C897400D1FEC3 /* lang_res in Resources */,
 				CEE4BC07185C97EB00D1FEC3 /* res.zip in Resources */,
+				CEE4BC0A185C9B9200D1FEC3 /* lang_res.zip in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

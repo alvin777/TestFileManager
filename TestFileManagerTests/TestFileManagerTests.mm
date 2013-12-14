@@ -131,6 +131,25 @@ NSString *BufferToString(const char* buffer, size_t size) {
     STAssertEquals(bytesRead, (size_t)0, @"");
 }
 
+- (void)testLocalizedResFolderInZip
+{
+    ResourcesManager::sharedManager()->addLanguageFolder("ru", "localized/ru");
+    ResourcesManager::sharedManager()->addLanguageFolder("es", "localized/es");
+    ResourcesManager::sharedManager()->addArchive([[[NSBundle mainBundle] pathForResource:@"lang_res" ofType:@"zip"] UTF8String], "lang_res");
+    
+    size_t bytesRead = 0;
+    
+    ResourcesManager::sharedManager()->setCurrentLanguage("ru");
+    auto buffer = ResourcesManager::sharedManager()->readData("file_in_folder.txt", &bytesRead);
+    STAssertTrue(bytesRead > 0, @"");
+    STAssertEqualObjects(BufferToString(buffer.get(), bytesRead), @"файл в папке", @"");
+    
+    ResourcesManager::sharedManager()->setCurrentLanguage("es");
+    buffer = ResourcesManager::sharedManager()->readData("file_in_folder.txt", &bytesRead);
+    STAssertTrue(bytesRead > 0, @"");
+    STAssertEqualObjects(BufferToString(buffer.get(), bytesRead), @"un \"file\" es en papel", @"");
+}
+
 //- (void)testReadStoredFileInZip
 //{
 //    ResourcesManager::sharedManager()->addArchive([[[NSBundle mainBundle] pathForResource:@"archive1" ofType:@"zip"] UTF8String])

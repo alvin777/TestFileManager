@@ -223,6 +223,7 @@ void ResourcesManager::addArchive(const std::string& archivePath, const std::str
             }
             
             // skip folders and files outside specified folder
+            // TODO: folders skip doesn't work
             bool shouldAddRecord = true;
             std::string filenameString = filename;
             if (/*S_ISDIR(fileInfo.external_fa) || */
@@ -238,6 +239,15 @@ void ResourcesManager::addArchive(const std::string& archivePath, const std::str
                 fileRecord.size        = fileInfo.uncompressed_size;
                 fileRecord.zipFilePath = archivePath;
                 fileRecord.zipFilePos  = zipFilePos;
+                
+                // TODO: improve check by extracting required path components from file path
+                for (auto& folderLanguagePair : pImpl->relativeFolderToLanguageIdMap) {
+                    std::string pathPrefix = combine({rootFolder, folderLanguagePair.first});
+                    if (filenameString.compare(0, pathPrefix.size(), pathPrefix) == 0) {
+                        fileRecord.languageId = folderLanguagePair.second;
+                    }
+                }
+                
                 pImpl->filenameToRecordMap[pImpl->getFilenameId(filename)].push_back(fileRecord);
             }
             
