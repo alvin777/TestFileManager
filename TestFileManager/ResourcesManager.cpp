@@ -41,6 +41,20 @@ struct FileRecord {
     unz_file_pos zipFilePos;
 };
 
+struct StreamRecord {
+    FileRecord* fileRecord;
+    
+    // regular file
+    FILE* file;
+    
+    // zip
+    unzFile zipFile;
+    
+    bool operator < (const StreamRecord& other) const {
+        return fileRecord < other.fileRecord;
+    }
+};
+
 class ResourcesManagerImpl {
 private:
     friend class ResourcesManager;
@@ -53,6 +67,8 @@ private:
     std::map<std::string, std::string> relativeFolderToLanguageIdMap;
     std::map<std::string, std::string> relativeFolderToCategoryMap;
     std::set<std::string> enabledCategories;
+    
+    std::set<StreamRecord> openStreams;
     
     
     void addFolderRecursive(const std::string& folder, const std::string& relativeFolder, const std::string& languageId, const std::string& category);
@@ -132,9 +148,9 @@ ResourcesManager* ResourcesManager::sharedManager() {
     return manager;
 }
 
-ResourcesManager::ResourcesManager()
+ResourcesManager::ResourcesManager() :
+    pImpl(new ResourcesManagerImpl())
 {
-    pImpl = std::unique_ptr<ResourcesManagerImpl>(new ResourcesManagerImpl());
 }
 
 void ResourcesManager::reset() {
@@ -322,7 +338,8 @@ size_t ResourcesManagerImpl::readDataFromCompressedFile(const FileRecord& fileRe
         if (ret < 0) throw std::exception();
         
         unzCloseCurrentFile(zipFile);
-        
+        unzClose(zipFile);
+
         return ret;
     } catch (std::exception& e) {
         
@@ -417,4 +434,112 @@ size_t ResourcesManager::getSize(const std::string& filename) {
     if (!fileRecord) return 0;
 
     return fileRecord->size;
+}
+
+std::unique_ptr<Stream> ResourcesManager::getStream(const std::string& filename) {
+    
+    FileRecord* fileRecord = pImpl->findFileRecord(filename);
+    if (!fileRecord) return nullptr;
+    
+    StreamRecord streamRecord;
+    streamRecord.fileRecord = fileRecord;
+    
+    switch (fileRecord->fileType) {
+        case RegularFile:
+            streamRecord.file = fopen(fileRecord->filePath.c_str(), "rb");
+            if (!streamRecord.file) return nullptr;
+            break;
+            
+        case CompressedFile:
+        case StoredFile:
+        {
+            streamRecord.zipFile = unzOpen(fileRecord->zipFilePath.c_str());
+            if (!streamRecord.zipFile) throw std::exception();
+            
+            int ret = unzGoToFilePos(streamRecord.zipFile, &fileRecord->zipFilePos);
+            if (ret != UNZ_OK) throw std::exception();
+
+            ret = unzOpenCurrentFile(streamRecord.zipFile);
+            if (ret != UNZ_OK) throw std::exception();
+            break;
+        }
+    }
+    
+    auto returnPair = pImpl->openStreams.insert(streamRecord);
+    
+    return std::unique_ptr<Stream>(new Stream(reinterpret_cast<int>(&*returnPair.first)));
+}
+
+size_t ResourcesManager::readData(int handle, void* buffer, int size) {
+    
+    StreamRecord* streamRecord = reinterpret_cast<StreamRecord*>(handle);
+    
+    if (pImpl->openStreams.count(*streamRecord) == 0) return 0;
+    
+    int ret;
+    switch (streamRecord->fileRecord->fileType) {
+        case RegularFile:
+            ret = fread(buffer, 1, size, streamRecord->file);
+            break;
+            
+        case CompressedFile:
+        case StoredFile:
+            ret = unzReadCurrentFile(streamRecord->zipFile, buffer, size);
+            break;
+    }
+    
+    return ret;
+}
+
+int ResourcesManager::closeFile(int handle) {
+    StreamRecord* streamRecord = reinterpret_cast<StreamRecord*>(handle);
+    
+    if (pImpl->openStreams.count(*streamRecord) == 0) return 0;
+    
+    int ret = 0;
+    
+    switch (streamRecord->fileRecord->fileType) {
+        case RegularFile:
+            ret = fclose(streamRecord->file);
+            break;
+            
+        case CompressedFile:
+        case StoredFile: {
+            unzCloseCurrentFile(streamRecord->zipFile);
+            unzClose(streamRecord->zipFile);
+            break;
+        }
+    }
+    
+    pImpl->openStreams.erase(*streamRecord);
+    
+    return ret;
+}
+
+
+//
+// Stream
+//
+
+class StreamImpl {
+private:
+    friend class Stream;
+    
+    int handle = -1;
+};
+
+Stream::Stream(int handle) : pImpl(new StreamImpl()) {
+    pImpl->handle = handle;
+}
+
+Stream::~Stream() {
+    ResourcesManager::sharedManager()->closeFile(pImpl->handle);
+}
+
+size_t Stream::readData(void* buffer, int size) {
+    return ResourcesManager::sharedManager()->readData(pImpl->handle, buffer, size);
+}
+
+std::unique_ptr<char[]> Stream::readData(size_t* bytesRead) {
+    return nullptr;
 }

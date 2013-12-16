@@ -200,56 +200,55 @@ NSString *BufferToString(const char* buffer, size_t size) {
     STAssertEqualObjects(BufferToString(buffer.get(), bytesRead), @"large screen version", @"");
 }
 
-//- (void)testReadStoredFileInZip
-//{
-//    ResourcesManager::sharedManager()->addArchive([[[NSBundle mainBundle] pathForResource:@"archive1" ofType:@"zip"] UTF8String])
-//    
-//    char buffer[4];
-//    int bytesRead = ResourcesManager::sharedManager()->readData("test_stored.txt", &buffer, sizeof(buffer));
-//    STAssertEquals(bytesRead, 4, @"");
-//    STAssertEquals(buffer, "test", @"");
-//}
-//
-//- (void)testReadStoredStreamInZip
-//{
-//    ResourcesManager::sharedManager()->addArchive([[[NSBundle mainBundle] pathForResource:@"archive1" ofType:@"zip"] UTF8String])
-//    
-//    Stream stream = ResourcesManager::sharedManager()->getStream("test_stored.txt");
-//    STAssertEquals(stream.getSize(), 4, @"");
-//    char buffer[2];
-//    int bytesRead = stream.readData(&buffer, sizeof(buffer));
-//    STAssertEquals(bytesRead, 2, @"");
-//    STAssertEquals(buffer, "te", @"");
-//    
-//    bytesRead = stream.readData(&buffer, sizeof(buffer));
-//    STAssertEquals(bytesRead, 2, @"");
-//    STAssertEquals(buffer, "st", @"");
-//}
-//
-//- (void)testReadSmallScreenFileFromFolder
-//{
-//    ResourcesManager::sharedManager()->addRootFolder([[[NSBundle mainBundle] resourcePath] UTF8String]);
-//    
-//    ResourcesManager::sharedManager()->setTagFolder("screen-small", "small");
-//    ResourcesManager::sharedManager()->activateTag("small");
-//    
-//    char buffer[100];
-//    int bytesRead = ResourcesManager::sharedManager()->readData("test.txt", &buffer, sizeof(buffer));
-//    STAssertEquals(bytesRead, strlen("small-screen test"), @"");
-//    STAssertEquals(buffer, "small-screen test", @"");
-//}
-//
-//- (void)testReadSmallScreenFileWithSuffix
-//{
-//    ResourcesManager::sharedManager()->addRootFolder([[[NSBundle mainBundle] resourcePath] UTF8String]);
-//    
-//    ResourcesManager::sharedManager()->setTagSuffix("small", "small");
-//    ResourcesManager::sharedManager()->activateTag("small");
-//    
-//    char buffer[100];
-//    int bytesRead = ResourcesManager::sharedManager()->readData("test.txt", &buffer, sizeof(buffer));
-//    STAssertEquals(bytesRead, strlen("small-screen test"), @"");
-//    STAssertEquals(buffer, "small-screen test", @"");
-//}
+- (void)testReadFileStream
+{
+    ResourcesManager::sharedManager()->addRootFolder([[[NSBundle mainBundle] resourcePath] UTF8String]);
+    
+    auto stream = ResourcesManager::sharedManager()->getStream("test.txt");
+    
+    char buffer[3] = {0};
+    int bytesRead = stream->readData(&buffer, 2);
+    STAssertEquals(bytesRead, 2, @"");
+    STAssertEqualObjects(@(buffer), @"te", @"");
+                                     
+    bytesRead = stream->readData(&buffer, 2);
+    STAssertEquals(bytesRead, 2, @"");
+    STAssertEqualObjects(@(buffer), @"st", @"");
+                                 
+}
+
+- (void)testReadCompressedFileStream
+{
+    ResourcesManager::sharedManager()->addArchive([[[NSBundle mainBundle] pathForResource:@"test" ofType:@"zip"] UTF8String]);
+    
+    auto stream = ResourcesManager::sharedManager()->getStream("test.txt");
+    
+    char buffer[3] = {0};
+    int bytesRead = stream->readData(&buffer, 2);
+    STAssertEquals(bytesRead, 2, @"");
+    STAssertEqualObjects(@(buffer), @"te", @"");
+    
+    bytesRead = stream->readData(&buffer, 2);
+    STAssertEquals(bytesRead, 2, @"");
+    STAssertEqualObjects(@(buffer), @"st", @"");
+    
+}
+
+- (void)testReadStoredFileStream
+{
+    ResourcesManager::sharedManager()->addArchive([[[NSBundle mainBundle] pathForResource:@"test_stored" ofType:@"zip"] UTF8String]);
+    
+    auto stream = ResourcesManager::sharedManager()->getStream("test.txt");
+    
+    char buffer[3] = {0};
+    int bytesRead = stream->readData(&buffer, 2);
+    STAssertEquals(bytesRead, 2, @"");
+    STAssertEqualObjects(@(buffer), @"te", @"");
+    
+    bytesRead = stream->readData(&buffer, 2);
+    STAssertEquals(bytesRead, 2, @"");
+    STAssertEqualObjects(@(buffer), @"st", @"");
+    
+}
 
 @end
