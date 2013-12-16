@@ -15,6 +15,7 @@
 #include <dirent.h>
 
 #include <vector>
+#include <set>
 #include <map>
 #include <sstream>
 
@@ -29,6 +30,7 @@ struct FileRecord {
     FileType fileType;
     size_t size;
     std::string languageId;
+    std::string category;
     
     // regular file
     std::string filePath;     // /Users/user/../<AppId>/res/Textures/Demo.png
@@ -49,8 +51,11 @@ private:
     std::map<std::string, FileRecordList> filenameToRecordMap;
     std::string languageId;
     std::map<std::string, std::string> relativeFolderToLanguageIdMap;
+    std::map<std::string, std::string> relativeFolderToCategoryMap;
+    std::set<std::string> enabledCategories;
     
-    void addFolderRecursive(const std::string& folder, const std::string& relativeFolder);
+    
+    void addFolderRecursive(const std::string& folder, const std::string& relativeFolder, const std::string& languageId, const std::string& category);
     
     size_t readData(const FileRecord& fileRecord, void* buffer, int size);
     size_t readDataFromRegularFile(const std::string& filePath, void* buffer, int size);
@@ -137,11 +142,13 @@ void ResourcesManager::reset() {
     pImpl->filenameToRecordMap.clear();
     pImpl->languageId.clear();
     pImpl->relativeFolderToLanguageIdMap.clear();
+    pImpl->relativeFolderToCategoryMap.clear();
+    pImpl->enabledCategories.clear();
 }
 
 void ResourcesManager::addRootFolder(const std::string& rootFolder) {
     pImpl->rootFoldersList.push_back(rootFolder);
-    pImpl->addFolderRecursive(rootFolder, "");
+    pImpl->addFolderRecursive(rootFolder, "", "", "");
 }
 
 void ResourcesManager::addLanguageFolder(const std::string& languageId, const std::string& languageFolder) {
@@ -152,11 +159,23 @@ void ResourcesManager::setCurrentLanguage(const std::string& languageId) {
     pImpl->languageId = languageId;
 }
 
+void ResourcesManager::addCategoryFolder(const std::string& category, const std::string& categoryFolder) {
+    pImpl->relativeFolderToCategoryMap[categoryFolder] = category;
+    
+}
+void ResourcesManager::enableCategory(const std::string& category){
+    pImpl->enabledCategories.insert(category);
+}
+void ResourcesManager::disableCategory(const std::string& category) {
+    pImpl->enabledCategories.erase(category);
+}
+
+
 //
 // filesystem methods
 //
 
-void ResourcesManagerImpl::addFolderRecursive(const std::string& rootFolder, const std::string& relativeFolder) {
+void ResourcesManagerImpl::addFolderRecursive(const std::string& rootFolder, const std::string& relativeFolder, const std::string& languageId, const std::string& category) {
     DIR *dp = opendir(combine({rootFolder, relativeFolder}).c_str());
     if (!dp) return;
     
@@ -165,18 +184,33 @@ void ResourcesManagerImpl::addFolderRecursive(const std::string& rootFolder, con
         if (ep->d_name[0] == '.') continue;
         
         if (ep->d_type == DT_DIR) {
-            addFolderRecursive(rootFolder, combine({relativeFolder, ep->d_name}));
+            std::string newRelativeFolder = combine({relativeFolder, ep->d_name});
+            
+            std::string newLanguageId;
+            auto it = relativeFolderToLanguageIdMap.find(newRelativeFolder);
+            if (it != relativeFolderToLanguageIdMap.end()) {
+                newLanguageId = it->second;
+            } else {
+                newLanguageId = languageId;
+            }
+
+            std::string newCategory;
+            it = relativeFolderToCategoryMap.find(newRelativeFolder);
+            if (it != relativeFolderToCategoryMap.end()) {
+                newCategory = it->second;
+            } else {
+                newCategory = category;
+            }
+
+            addFolderRecursive(rootFolder, newRelativeFolder, newLanguageId, newCategory);
         } else {
             FileRecord fileRecord;
             fileRecord.filename    = ep->d_name;
             fileRecord.fileType    = RegularFile;
             fileRecord.filePath    = combine({rootFolder, relativeFolder, ep->d_name});
             fileRecord.size        = getFileSize(fileRecord.filePath);
-            
-            auto it = relativeFolderToLanguageIdMap.find(relativeFolder);
-            if (it != relativeFolderToLanguageIdMap.end()) {
-                fileRecord.languageId = it->second;
-            }
+            fileRecord.languageId  = languageId;
+            fileRecord.category    = category;
             
             filenameToRecordMap[getFilenameId(fileRecord.filename)].push_back(fileRecord);
         }
@@ -195,7 +229,6 @@ size_t ResourcesManagerImpl::readDataFromRegularFile(const std::string& filePath
     
     return bytesRead;
 }
-
 
 //
 // zip archive methods
@@ -247,7 +280,14 @@ void ResourcesManager::addArchive(const std::string& archivePath, const std::str
                         fileRecord.languageId = folderLanguagePair.second;
                     }
                 }
-                
+
+                for (auto& folderCategoryPair : pImpl->relativeFolderToCategoryMap) {
+                    std::string pathPrefix = combine({rootFolder, folderCategoryPair.first});
+                    if (filenameString.compare(0, pathPrefix.size(), pathPrefix) == 0) {
+                        fileRecord.category = folderCategoryPair.second;
+                    }
+                }
+
                 pImpl->filenameToRecordMap[pImpl->getFilenameId(filename)].push_back(fileRecord);
             }
             
@@ -313,27 +353,29 @@ FileRecord* ResourcesManagerImpl::findFileRecord(const std::string& filename) {
     
     auto it = filenameToRecordMap.find(filenameId);
     if (it == filenameToRecordMap.end()) return nullptr;
-    
+
+    // empty array (?)
+    if (it->second.size() == 0) return nullptr;
+
     // if language is not set - return non-specific fie record
     // if language is set return language-specific record if exists and non-specific otherwise
+    std::set<FileRecord*, std::function<bool(FileRecord*, FileRecord*)>>
+        candidatesList([] ( FileRecord* rec1, FileRecord* rec2) {
+            return rec1->category   > rec2->category ||
+                   rec1->languageId > rec2->languageId;
+        });
     
-    if (languageId.empty()) {
-        for (auto& fileRecord : it->second) {
-            if (fileRecord.languageId.empty()) return &fileRecord;
+    for (auto& fileRecord : it->second) {
+        if ((languageId.empty() || fileRecord.languageId == languageId) &&
+            (fileRecord.category.empty() || enabledCategories.count(fileRecord.category) > 0))
+        {
+            candidatesList.insert(&fileRecord);
         }
-    } else {
-        FileRecord* nonLanguageSpecificFileRecord = nullptr;
-        for (auto& fileRecord : it->second) {
-            if (fileRecord.languageId.empty()) nonLanguageSpecificFileRecord = &fileRecord;
-            
-            if (fileRecord.languageId == languageId) {
-                return &fileRecord;
-            }
-        }
-        return nonLanguageSpecificFileRecord;
     }
     
-    return nullptr;
+    if (candidatesList.empty()) return nullptr;
+    
+    return *candidatesList.begin();
 }
 
 size_t ResourcesManagerImpl::readData(const FileRecord& fileRecord, void* buffer, int size) {

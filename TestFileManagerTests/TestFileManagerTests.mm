@@ -150,6 +150,56 @@ NSString *BufferToString(const char* buffer, size_t size) {
     STAssertEqualObjects(BufferToString(buffer.get(), bytesRead), @"un \"file\" es en papel", @"");
 }
 
+- (void)testCategoryFile
+{
+    ResourcesManager::sharedManager()->addCategoryFolder("small-screen", "small-screen");
+    ResourcesManager::sharedManager()->addCategoryFolder("large-screen", "large-screen");
+    ResourcesManager::sharedManager()->addRootFolder([[[[NSBundle mainBundle] resourcePath] stringByAppendingPathComponent:@"category_res"] UTF8String]);
+    
+    size_t bytesRead = 0;
+
+    auto buffer = ResourcesManager::sharedManager()->readData("file_in_folder.txt", &bytesRead);
+    STAssertTrue(bytesRead > 0, @"");
+    STAssertEqualObjects(BufferToString(buffer.get(), bytesRead), @"regular version", @"");
+
+    ResourcesManager::sharedManager()->enableCategory("small-screen");
+    buffer = ResourcesManager::sharedManager()->readData("file_in_folder.txt", &bytesRead);
+    STAssertTrue(bytesRead > 0, @"");
+    STAssertEqualObjects(BufferToString(buffer.get(), bytesRead), @"small screen version", @"");
+    
+    ResourcesManager::sharedManager()->disableCategory("small-screen");
+    ResourcesManager::sharedManager()->enableCategory("large-screen");
+
+    buffer = ResourcesManager::sharedManager()->readData("file_in_folder.txt", &bytesRead);
+    STAssertTrue(bytesRead > 0, @"");
+    STAssertEqualObjects(BufferToString(buffer.get(), bytesRead), @"large screen version", @"");
+}
+
+- (void)testCategoryCompressedFile
+{
+    ResourcesManager::sharedManager()->addCategoryFolder("small-screen", "small-screen");
+    ResourcesManager::sharedManager()->addCategoryFolder("large-screen", "large-screen");
+    ResourcesManager::sharedManager()->addArchive([[[NSBundle mainBundle] pathForResource:@"category_res" ofType:@"zip"] UTF8String], "category_res");
+    
+    size_t bytesRead = 0;
+    
+    auto buffer = ResourcesManager::sharedManager()->readData("file_in_folder.txt", &bytesRead);
+    STAssertTrue(bytesRead > 0, @"");
+    STAssertEqualObjects(BufferToString(buffer.get(), bytesRead), @"regular version", @"");
+    
+    ResourcesManager::sharedManager()->enableCategory("small-screen");
+    buffer = ResourcesManager::sharedManager()->readData("file_in_folder.txt", &bytesRead);
+    STAssertTrue(bytesRead > 0, @"");
+    STAssertEqualObjects(BufferToString(buffer.get(), bytesRead), @"small screen version", @"");
+    
+    ResourcesManager::sharedManager()->disableCategory("small-screen");
+    ResourcesManager::sharedManager()->enableCategory("large-screen");
+    
+    buffer = ResourcesManager::sharedManager()->readData("file_in_folder.txt", &bytesRead);
+    STAssertTrue(bytesRead > 0, @"");
+    STAssertEqualObjects(BufferToString(buffer.get(), bytesRead), @"large screen version", @"");
+}
+
 //- (void)testReadStoredFileInZip
 //{
 //    ResourcesManager::sharedManager()->addArchive([[[NSBundle mainBundle] pathForResource:@"archive1" ofType:@"zip"] UTF8String])
