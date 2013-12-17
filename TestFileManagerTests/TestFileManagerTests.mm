@@ -251,4 +251,33 @@ NSString *BufferToString(const char* buffer, size_t size) {
     
 }
 
+- (void)testSearchRoots
+{
+    ResourcesManager::sharedManager()->setSearchByRelativePaths(true);
+    ResourcesManager::sharedManager()->addRootFolder([[[[NSBundle mainBundle] resourcePath] stringByAppendingPathComponent:@"res_search"] UTF8String]);
+    ResourcesManager::sharedManager()->addSearchRoot("folder1/search_root");
+                                                     
+    size_t bytesRead = 0;
+    auto buffer = ResourcesManager::sharedManager()->readData("folder1/test.txt", &bytesRead);
+    STAssertTrue(bytesRead > 0, @"");
+    STAssertEqualObjects(BufferToString(buffer.get(), bytesRead), @"test", @"");
+    
+    ResourcesManager::sharedManager()->readData("test.txt", &bytesRead);
+    STAssertEquals(bytesRead, (size_t)0, @"");
+}
+
+- (void)testSearchRootsInArchive
+{
+    ResourcesManager::sharedManager()->setSearchByRelativePaths(true);
+    ResourcesManager::sharedManager()->addArchive([[[NSBundle mainBundle] pathForResource:@"res_search" ofType:@"zip"] UTF8String], "res_search");
+    ResourcesManager::sharedManager()->addSearchRoot("folder1/search_root");
+    
+    size_t bytesRead = 0;
+    auto buffer = ResourcesManager::sharedManager()->readData("folder1/test.txt", &bytesRead);
+    STAssertTrue(bytesRead > 0, @"");
+    STAssertEqualObjects(BufferToString(buffer.get(), bytesRead), @"test", @"");
+    
+    ResourcesManager::sharedManager()->readData("test.txt", &bytesRead);
+    STAssertEquals(bytesRead, (size_t)0, @"");
+}
 @end

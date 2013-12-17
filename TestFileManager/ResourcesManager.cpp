@@ -69,7 +69,8 @@ private:
     std::set<std::string> enabledCategories;
     
     std::set<StreamRecord> openStreams;
-    
+    bool searchByRelativePaths = false;
+    std::vector<std::string> searchRootsList = {""};
     
     void addFolderRecursive(const std::string& folder, const std::string& relativeFolder, const std::string& languageId, const std::string& category);
     
@@ -77,7 +78,7 @@ private:
     size_t readDataFromRegularFile(const std::string& filePath, void* buffer, int size);
     size_t readDataFromCompressedFile(const FileRecord& fileRecord, void* buffer, int size);
     
-    std::string getFilenameId(const std::string& filename);
+    std::string makeKey(const std::string& filename);
     
     FileRecord* findFileRecord(const std::string& filename);
 };
@@ -86,10 +87,10 @@ private:
 // utility functions
 //
 
-std::string basename(const std::string& path) {
+static std::string basename(const std::string& path) {
     std::string basename;
     
-    size_t pos = path.find_last_of("/");
+    size_t pos = path.find_last_of("/\\");
     if(pos != std::string::npos)
         basename.assign(path.begin() + pos + 1, path.end());
     else
@@ -98,7 +99,7 @@ std::string basename(const std::string& path) {
     return basename;
 }
 
-std::string combine(const std::initializer_list<std::string>& pathComponentsList) {
+static std::string combine(const std::initializer_list<std::string>& pathComponentsList) {
     std::stringstream out;
     for (auto& pathComponent : pathComponentsList) {
         if (!pathComponent.empty())
@@ -118,8 +119,8 @@ std::string removeExtension(const std::string& filename) {
     return filename.substr(0, lastdot);
 }
 
-std::string getRootFolder(const std::string& filePath) {
-    size_t firstSlash = filePath.find_first_of('/');
+static std::string getRootFolder(const std::string& filePath) {
+    size_t firstSlash = filePath.find_first_of("/\\");
     if (firstSlash == std::string::npos) return filePath;
     
     // TODO: support paths starting with slash
@@ -127,7 +128,7 @@ std::string getRootFolder(const std::string& filePath) {
     return filePath.substr(0, firstSlash);
 }
 
-long getFileSize(const std::string& filePath)
+static long getFileSize(const std::string& filePath)
 {
     struct stat stat_buf;
     int rc = stat(filePath.c_str(), &stat_buf);
@@ -153,6 +154,10 @@ ResourcesManager::ResourcesManager() :
 {
 }
 
+//
+// configuration methods
+//
+
 void ResourcesManager::reset() {
     pImpl->rootFoldersList.clear();
     pImpl->filenameToRecordMap.clear();
@@ -160,6 +165,8 @@ void ResourcesManager::reset() {
     pImpl->relativeFolderToLanguageIdMap.clear();
     pImpl->relativeFolderToCategoryMap.clear();
     pImpl->enabledCategories.clear();
+    pImpl->searchByRelativePaths = false;
+    pImpl->searchRootsList = {""};
 }
 
 void ResourcesManager::addRootFolder(const std::string& rootFolder) {
@@ -186,12 +193,21 @@ void ResourcesManager::disableCategory(const std::string& category) {
     pImpl->enabledCategories.erase(category);
 }
 
+void ResourcesManager::setSearchByRelativePaths(bool searchByRelativePaths) {
+    pImpl->searchByRelativePaths = searchByRelativePaths;
+}
+
+void ResourcesManager::addSearchRoot(const std::string& searchRoot) {
+    pImpl->searchRootsList.push_back(searchRoot);
+}
+
 
 //
 // filesystem methods
 //
 
 void ResourcesManagerImpl::addFolderRecursive(const std::string& rootFolder, const std::string& relativeFolder, const std::string& languageId, const std::string& category) {
+    
     DIR *dp = opendir(combine({rootFolder, relativeFolder}).c_str());
     if (!dp) return;
     
@@ -223,12 +239,15 @@ void ResourcesManagerImpl::addFolderRecursive(const std::string& rootFolder, con
             FileRecord fileRecord;
             fileRecord.filename    = ep->d_name;
             fileRecord.fileType    = RegularFile;
-            fileRecord.filePath    = combine({rootFolder, relativeFolder, ep->d_name});
+            fileRecord.relativePath= combine({relativeFolder, ep->d_name});
+            fileRecord.filePath    = combine({rootFolder, fileRecord.relativePath});
             fileRecord.size        = getFileSize(fileRecord.filePath);
             fileRecord.languageId  = languageId;
             fileRecord.category    = category;
             
-            filenameToRecordMap[getFilenameId(fileRecord.filename)].push_back(fileRecord);
+            std::string key = searchByRelativePaths ? fileRecord.relativePath : fileRecord.filename;
+            
+            filenameToRecordMap[makeKey(key)].push_back(fileRecord);
         }
     }
     
@@ -257,9 +276,9 @@ void ResourcesManager::addArchive(const std::string& archivePath, const std::str
         unzFile zipFile = unzOpen(archivePath.c_str());
         if (!zipFile) throw std::exception();
 
-        char filename[256] = {0};
+        char filePath[1024] = {0};
         unz_file_info64 fileInfo;
-        int ret = unzGoToFirstFile2(zipFile, &fileInfo, filename, sizeof(filename), NULL, 0, NULL, 0);
+        int ret = unzGoToFirstFile2(zipFile, &fileInfo, filePath, sizeof(filePath), NULL, 0, NULL, 0);
         if (ret != UNZ_OK) throw std::exception();
         
         do {
@@ -267,23 +286,30 @@ void ResourcesManager::addArchive(const std::string& archivePath, const std::str
             ret = unzGetFilePos(zipFile, &zipFilePos);
             if (ret != UNZ_OK) throw std::exception();
             
-            if (pImpl->filenameToRecordMap.count(filename) != 0) {
+            if (pImpl->filenameToRecordMap.count(filePath) != 0) {
                 throw std::exception();
             }
             
             // skip folders and files outside specified folder
-            // TODO: folders skip doesn't work
             bool shouldAddRecord = true;
-            std::string filenameString = filename;
-            if (/*S_ISDIR(fileInfo.external_fa) || */
+            std::string filePathString = filePath;
+            std::string slashEndedRootFolder = rootFolder + '/';
+            if (filePathString[filePathString.size()-1] == '/' ||
                 (!rootFolder.empty() &&
-                 getRootFolder(filenameString) != rootFolder)) {
+                 filePathString.compare(0, slashEndedRootFolder.size(), slashEndedRootFolder) != 0)) {
                 shouldAddRecord = false; 
             }
             
             if (shouldAddRecord) {
+                
+                std::string rootFolderRelativePath = filePathString;
+                if (!rootFolder.empty()) {
+                    rootFolderRelativePath = rootFolderRelativePath.substr(slashEndedRootFolder.size(), rootFolderRelativePath.size() - slashEndedRootFolder.size());
+                }
+                
                 FileRecord fileRecord;
-                fileRecord.filename    = filenameString;
+                fileRecord.filename    = filePathString;
+                fileRecord.relativePath= rootFolderRelativePath;
                 fileRecord.fileType    = CompressedFile;
                 fileRecord.size        = fileInfo.uncompressed_size;
                 fileRecord.zipFilePath = archivePath;
@@ -292,22 +318,24 @@ void ResourcesManager::addArchive(const std::string& archivePath, const std::str
                 // TODO: improve check by extracting required path components from file path
                 for (auto& folderLanguagePair : pImpl->relativeFolderToLanguageIdMap) {
                     std::string pathPrefix = combine({rootFolder, folderLanguagePair.first});
-                    if (filenameString.compare(0, pathPrefix.size(), pathPrefix) == 0) {
+                    if (filePathString.compare(0, pathPrefix.size(), pathPrefix) == 0) {
                         fileRecord.languageId = folderLanguagePair.second;
                     }
                 }
 
                 for (auto& folderCategoryPair : pImpl->relativeFolderToCategoryMap) {
                     std::string pathPrefix = combine({rootFolder, folderCategoryPair.first});
-                    if (filenameString.compare(0, pathPrefix.size(), pathPrefix) == 0) {
+                    if (filePathString.compare(0, pathPrefix.size(), pathPrefix) == 0) {
                         fileRecord.category = folderCategoryPair.second;
                     }
                 }
+                
+                std::string key = pImpl->searchByRelativePaths ? fileRecord.relativePath : filePath;
 
-                pImpl->filenameToRecordMap[pImpl->getFilenameId(filename)].push_back(fileRecord);
+                pImpl->filenameToRecordMap[pImpl->makeKey(key)].push_back(fileRecord);
             }
             
-            ret = unzGoToNextFile2(zipFile, &fileInfo, filename, sizeof(filename), NULL, 0, NULL, 0);
+            ret = unzGoToNextFile2(zipFile, &fileInfo, filePath, sizeof(filePath), NULL, 0, NULL, 0);
             if (ret == UNZ_END_OF_LIST_OF_FILE) break;
             if (ret != UNZ_OK) throw std::exception();
 
@@ -357,36 +385,39 @@ size_t ResourcesManagerImpl::readDataFromCompressedFile(const FileRecord& fileRe
 // common methods
 //
 
-std::string ResourcesManagerImpl::getFilenameId(const std::string& filename) {
-    std::string filenameId = basename(filename);
-    std::transform(filenameId.begin(), filenameId.end(), filenameId.begin(), ::tolower);
+std::string ResourcesManagerImpl::makeKey(const std::string& filename) {
+    std::string key = searchByRelativePaths ? filename :  basename(filename);
+    std::transform(key.begin(), key.end(), key.begin(), ::tolower);
 //    filenameId = removeExtension(filenameId);
     
-    return filenameId;
+    return key;
 }
 
 FileRecord* ResourcesManagerImpl::findFileRecord(const std::string& filename) {
-    std::string filenameId = getFilenameId(filename);
+    std::string key = makeKey(filename);
     
-    auto it = filenameToRecordMap.find(filenameId);
-    if (it == filenameToRecordMap.end()) return nullptr;
-
-    // empty array (?)
-    if (it->second.size() == 0) return nullptr;
-
-    // if language is not set - return non-specific fie record
-    // if language is set return language-specific record if exists and non-specific otherwise
     std::set<FileRecord*, std::function<bool(FileRecord*, FileRecord*)>>
-        candidatesList([] ( FileRecord* rec1, FileRecord* rec2) {
+        candidatesList([] (FileRecord* rec1, FileRecord* rec2) {
             return rec1->category   > rec2->category ||
                    rec1->languageId > rec2->languageId;
-        });
-    
-    for (auto& fileRecord : it->second) {
-        if ((languageId.empty() || fileRecord.languageId == languageId) &&
-            (fileRecord.category.empty() || enabledCategories.count(fileRecord.category) > 0))
-        {
-            candidatesList.insert(&fileRecord);
+    });
+
+    for (auto& searchRoot : searchRootsList) {
+        auto it = filenameToRecordMap.find(combine({searchRoot, key}));
+        if (it == filenameToRecordMap.end()) continue;
+
+        // empty array (?)
+        if (it->second.size() == 0) continue;
+
+        // if language is not set - return non-specific file record
+        // if language is set return language-specific record if exists and non-specific otherwise
+        
+        for (auto& fileRecord : it->second) {
+            if ((languageId.empty() || fileRecord.languageId == languageId) &&
+                (fileRecord.category.empty() || enabledCategories.count(fileRecord.category) > 0))
+            {
+                candidatesList.insert(&fileRecord);
+            }
         }
     }
     

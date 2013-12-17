@@ -29,6 +29,9 @@ public:
     void enableCategory(const std::string& category);
     void disableCategory(const std::string& category);
     void setCurrentLanguage(const std::string& languageId);
+    void setSearchByRelativePaths(bool searchByRelativePaths);
+    void addSearchRoot(const std::string& searchRoot);
+    
     size_t getSize(const std::string& filename);
     size_t readData(const std::string& filename, void* buffer, int size);
     std::unique_ptr<char[]> readData(const std::string& filename, size_t* bytesRead);
