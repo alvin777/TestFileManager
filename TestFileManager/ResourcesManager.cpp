@@ -126,6 +126,10 @@ static std::string combine(const std::initializer_list<std::string>& pathCompone
     return outString.substr(0, outString.size() - 1);
 }
 
+static void lowercase(std::string& string) {
+    std::transform(string.begin(), string.end(), string.begin(), ::tolower);
+}
+
 static void replaceAll( std::string &s, const std::string &search, const std::string &replace ) {
     for( size_t pos = 0; ; pos += replace.length() ) {
         // Locate the substring to replace
@@ -417,7 +421,7 @@ void ResourcesManagerImpl::traceFileRecord(const std::string& key, const FileRec
 
 std::string ResourcesManagerImpl::makeKey(const std::string& filename) {
     std::string key = searchByRelativePaths ? filename :  basename(filename);
-    std::transform(key.begin(), key.end(), key.begin(), ::tolower);
+    lowercase(key);
     replaceAll(key, "\\\\", "/");
     std::replace(key.begin(), key.end(), '\\', '/');
 //    filenameId = removeExtension(filenameId);
@@ -429,16 +433,9 @@ void ResourcesManagerImpl::rebuildIndex() {
     fileRecordIndex.clear();
     
     for (auto& fileRecord : fileRecordList) {
-        
-//        for (auto& folderLanguagePair : relativeFolderToLanguageIdMap) {
-//            std::string pathPrefix = combine({rootFolder, folderLanguagePair.first});
-//            if (filePathString.compare(0, pathPrefix.size(), pathPrefix) == 0) {
-//                fileRecord.languageId = folderLanguagePair.second;
-//            }
-//        }
-        
         bool skipRecord = false;
         std::string relativePathInMap = fileRecord.relativePath;
+        lowercase(relativePathInMap);
 
         for (auto& folderLanguageIdPair :  relativeFolderToLanguageIdMap) {
             std::string pathComponentToSearch = folderLanguageIdPair.first + "/";
@@ -454,8 +451,13 @@ void ResourcesManagerImpl::rebuildIndex() {
             }
         }
 
+        if (skipRecord) continue;
+
+
         for (auto& folderCategoryPair :  relativeFolderToCategoryMap) {
             std::string pathComponentToSearch = folderCategoryPair.first + "/";
+            lowercase(pathComponentToSearch);
+
             if (relativePathInMap.find(pathComponentToSearch) != std::string::npos)
             {
                 if (enabledCategories.count(folderCategoryPair.second) == 0) {
@@ -468,20 +470,34 @@ void ResourcesManagerImpl::rebuildIndex() {
             }
         }
         
+        if (skipRecord) continue;
+
+
+        std::string key = makeKey(relativePathInMap);
+        fileRecordIndex[key] = &fileRecord;
+
+        if (enableTrace)
+            traceFileRecord(key, fileRecord);
+
+        
         for (auto& searchRoot : searchRootsList) {
             if (searchRoot.empty()) continue;
             
             std::string pathComponentToSearch = searchRoot + "/";
-            replaceAll(relativePathInMap, pathComponentToSearch, "");
+            lowercase(pathComponentToSearch);
+            replaceAll(pathComponentToSearch, "\\\\", "/");
+            
+            if (relativePathInMap.compare(0, pathComponentToSearch.size(), pathComponentToSearch) == 0) {
+                
+                std::string searchRootRelativePath = relativePathInMap.substr(pathComponentToSearch.size());
+                
+                std::string key = makeKey(searchRootRelativePath);
+                fileRecordIndex[key] = &fileRecord;
+                
+                if (enableTrace)
+                    traceFileRecord(key, fileRecord);
+            }
         }
-        
-        if (skipRecord) continue;
-        
-        std::string key = makeKey(relativePathInMap);
-        fileRecordIndex[key] = &fileRecord;
-        
-        if (enableTrace)
-            traceFileRecord(key, fileRecord);
     }
     
     shouldRebuildIndex = false;
