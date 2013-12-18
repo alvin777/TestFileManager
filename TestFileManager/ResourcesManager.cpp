@@ -18,6 +18,7 @@
 #include <set>
 #include <map>
 #include <sstream>
+#include <iostream>
 
 #include "unzip.h"
 
@@ -43,6 +44,7 @@ struct FileRecord {
 
 struct StreamRecord {
     FileRecord* fileRecord;
+    int randomValue;
     
     // regular file
     FILE* file;
@@ -50,8 +52,11 @@ struct StreamRecord {
     // zip
     unzFile zipFile;
     
+//    bool operator== (const StreamRecord& other) {
+//        return this == &other;
+//    }
     bool operator < (const StreamRecord& other) const {
-        return fileRecord < other.fileRecord;
+        return randomValue < other.randomValue;
     }
 };
 
@@ -61,6 +66,8 @@ private:
     
     typedef std::vector<FileRecord> FileRecordList;
     
+    bool enableTrace;
+    
     std::vector<std::string> rootFoldersList;
     std::map<std::string, FileRecordList> filenameToRecordMap;
     std::string languageId;
@@ -68,11 +75,11 @@ private:
     std::map<std::string, std::string> relativeFolderToCategoryMap;
     std::set<std::string> enabledCategories;
     
-    std::set<StreamRecord> openStreams;
-    bool searchByRelativePaths = false;
-    std::vector<std::string> searchRootsList = {""};
+    std::map<int, StreamRecord> openStreams;
+    bool searchByRelativePaths;
+    std::vector<std::string> searchRootsList;
     
-    void addFolderRecursive(const std::string& folder, const std::string& relativeFolder, const std::string& languageId, const std::string& category);
+    void addFolderRecursive(const std::string& folder, const std::string& relativeFolder, const std::string& relativeFolderInMap, const std::string& languageId, const std::string& category);
     
     size_t readData(const FileRecord& fileRecord, void* buffer, int size);
     size_t readDataFromRegularFile(const std::string& filePath, void* buffer, int size);
@@ -81,6 +88,9 @@ private:
     std::string makeKey(const std::string& filename);
     
     FileRecord* findFileRecord(const std::string& filename);
+    StreamRecord* getStreamRecord(int handle);
+    
+    void traceFileRecord(const std::string& key, const FileRecord& fileRecord);
 };
 
 //
@@ -111,6 +121,17 @@ static std::string combine(const std::initializer_list<std::string>& pathCompone
     if (outString.size() == 0) return outString;
     
     return outString.substr(0, outString.size() - 1);
+}
+
+static void replaceAll( std::string &s, const std::string &search, const std::string &replace ) {
+    for( size_t pos = 0; ; pos += replace.length() ) {
+        // Locate the substring to replace
+        pos = s.find( search, pos );
+        if( pos == std::string::npos ) break;
+        // Replace by erasing and inserting
+        s.erase( pos, search.length() );
+        s.insert( pos, replace );
+    }
 }
 
 std::string removeExtension(const std::string& filename) {
@@ -152,6 +173,7 @@ ResourcesManager* ResourcesManager::sharedManager() {
 ResourcesManager::ResourcesManager() :
     pImpl(new ResourcesManagerImpl())
 {
+    reset();
 }
 
 //
@@ -159,6 +181,7 @@ ResourcesManager::ResourcesManager() :
 //
 
 void ResourcesManager::reset() {
+    pImpl->enableTrace = false;
     pImpl->rootFoldersList.clear();
     pImpl->filenameToRecordMap.clear();
     pImpl->languageId.clear();
@@ -169,9 +192,13 @@ void ResourcesManager::reset() {
     pImpl->searchRootsList = {""};
 }
 
+void ResourcesManager::enableTrace(bool enableTrace) {
+    pImpl->enableTrace = enableTrace;
+}
+
 void ResourcesManager::addRootFolder(const std::string& rootFolder) {
     pImpl->rootFoldersList.push_back(rootFolder);
-    pImpl->addFolderRecursive(rootFolder, "", "", "");
+    pImpl->addFolderRecursive(rootFolder, "", "", "", "");
 }
 
 void ResourcesManager::addLanguageFolder(const std::string& languageId, const std::string& languageFolder) {
@@ -198,7 +225,9 @@ void ResourcesManager::setSearchByRelativePaths(bool searchByRelativePaths) {
 }
 
 void ResourcesManager::addSearchRoot(const std::string& searchRoot) {
-    pImpl->searchRootsList.push_back(searchRoot);
+    std::string canonicalSearchRoot = searchRoot;
+    replaceAll(canonicalSearchRoot, "\\\\", "/");
+    pImpl->searchRootsList.push_back(canonicalSearchRoot);
 }
 
 
@@ -206,7 +235,7 @@ void ResourcesManager::addSearchRoot(const std::string& searchRoot) {
 // filesystem methods
 //
 
-void ResourcesManagerImpl::addFolderRecursive(const std::string& rootFolder, const std::string& relativeFolder, const std::string& languageId, const std::string& category) {
+void ResourcesManagerImpl::addFolderRecursive(const std::string& rootFolder, const std::string& relativeFolder, const std::string& relativeFolderInMap, const std::string& languageId, const std::string& category) {
     
     DIR *dp = opendir(combine({rootFolder, relativeFolder}).c_str());
     if (!dp) return;
@@ -227,14 +256,17 @@ void ResourcesManagerImpl::addFolderRecursive(const std::string& rootFolder, con
             }
 
             std::string newCategory;
-            it = relativeFolderToCategoryMap.find(newRelativeFolder);
+            std::string newRelativeFolderInMap;
+            it = relativeFolderToCategoryMap.find(ep->d_name);
             if (it != relativeFolderToCategoryMap.end()) {
                 newCategory = it->second;
+                newRelativeFolderInMap = relativeFolderInMap;
             } else {
                 newCategory = category;
+                newRelativeFolderInMap = combine({relativeFolderInMap, ep->d_name});;
             }
 
-            addFolderRecursive(rootFolder, newRelativeFolder, newLanguageId, newCategory);
+            addFolderRecursive(rootFolder, newRelativeFolder, newRelativeFolderInMap, newLanguageId, newCategory);
         } else {
             FileRecord fileRecord;
             fileRecord.filename    = ep->d_name;
@@ -245,9 +277,12 @@ void ResourcesManagerImpl::addFolderRecursive(const std::string& rootFolder, con
             fileRecord.languageId  = languageId;
             fileRecord.category    = category;
             
-            std::string key = searchByRelativePaths ? fileRecord.relativePath : fileRecord.filename;
             
-            filenameToRecordMap[makeKey(key)].push_back(fileRecord);
+            std::string key = makeKey(combine({relativeFolderInMap, ep->d_name}));
+            filenameToRecordMap[key].push_back(fileRecord);
+            
+            if (enableTrace)
+                traceFileRecord(key, fileRecord);
         }
     }
     
@@ -323,16 +358,20 @@ void ResourcesManager::addArchive(const std::string& archivePath, const std::str
                     }
                 }
 
+                std::string relativePathInMap = fileRecord.relativePath;
                 for (auto& folderCategoryPair : pImpl->relativeFolderToCategoryMap) {
-                    std::string pathPrefix = combine({rootFolder, folderCategoryPair.first});
-                    if (filePathString.compare(0, pathPrefix.size(), pathPrefix) == 0) {
+                    std::string pathComponentToSearch = folderCategoryPair.first + "/";
+                    if (filePathString.find(pathComponentToSearch) != std::string::npos)
+                    {
                         fileRecord.category = folderCategoryPair.second;
+                        replaceAll(relativePathInMap, pathComponentToSearch, "");
                     }
                 }
+                std::string key = pImpl->makeKey(relativePathInMap);
+                pImpl->filenameToRecordMap[key].push_back(fileRecord);
                 
-                std::string key = pImpl->searchByRelativePaths ? fileRecord.relativePath : filePath;
-
-                pImpl->filenameToRecordMap[pImpl->makeKey(key)].push_back(fileRecord);
+                if (pImpl->enableTrace)
+                    pImpl->traceFileRecord(key, fileRecord);
             }
             
             ret = unzGoToNextFile2(zipFile, &fileInfo, filePath, sizeof(filePath), NULL, 0, NULL, 0);
@@ -385,9 +424,26 @@ size_t ResourcesManagerImpl::readDataFromCompressedFile(const FileRecord& fileRe
 // common methods
 //
 
+void ResourcesManagerImpl::traceFileRecord(const std::string& key, const FileRecord& fileRecord) {
+    
+    std::cout << key << ": ";
+    
+    if (!fileRecord.zipFilePath.empty())
+        std::cout << "zip: " << basename(fileRecord.zipFilePath) << ", ";
+    
+    std::cout << "relative path: " << fileRecord.relativePath << ", ";
+        
+    if (!fileRecord.category.empty())
+        std::cout << "category: " << fileRecord.category << ", ";
+    
+    std::cout << "size: " << fileRecord.size << std::endl;
+}
+
 std::string ResourcesManagerImpl::makeKey(const std::string& filename) {
     std::string key = searchByRelativePaths ? filename :  basename(filename);
     std::transform(key.begin(), key.end(), key.begin(), ::tolower);
+    replaceAll(key, "\\\\", "/");
+    std::replace(key.begin(), key.end(), '\\', '/');
 //    filenameId = removeExtension(filenameId);
     
     return key;
@@ -403,7 +459,7 @@ FileRecord* ResourcesManagerImpl::findFileRecord(const std::string& filename) {
     });
 
     for (auto& searchRoot : searchRootsList) {
-        auto it = filenameToRecordMap.find(combine({searchRoot, key}));
+        auto it = filenameToRecordMap.find(makeKey(combine({searchRoot, key})));
         if (it == filenameToRecordMap.end()) continue;
 
         // empty array (?)
@@ -419,11 +475,17 @@ FileRecord* ResourcesManagerImpl::findFileRecord(const std::string& filename) {
                 candidatesList.insert(&fileRecord);
             }
         }
+        
+        if (candidatesList.size()) break;
     }
     
     if (candidatesList.empty()) return nullptr;
     
     return *candidatesList.begin();
+}
+
+bool ResourcesManager::exists(const std::string& filename) {
+    return (pImpl->findFileRecord(filename) != nullptr);
 }
 
 size_t ResourcesManagerImpl::readData(const FileRecord& fileRecord, void* buffer, int size) {
@@ -445,17 +507,21 @@ size_t ResourcesManager::readData(const std::string& filename, void* buffer, int
     return pImpl->readData(*fileRecord, buffer, size);
 }
 
-std::unique_ptr<char[]> ResourcesManager::readData(const std::string& filename, size_t* bytesRead) {
+std::unique_ptr<char[]> ResourcesManager::readData(const std::string& filename, size_t* pBytesRead) {
     
     FileRecord* fileRecord = pImpl->findFileRecord(filename);
     if (!fileRecord) {
-        *bytesRead = 0;
+        if (pBytesRead)
+            *pBytesRead = 0;
         return nullptr;
     }
     
     std::unique_ptr<char[]> buffer(new char[fileRecord->size]);
-    *bytesRead = pImpl->readData(*fileRecord, buffer.get(), fileRecord->size);
-    if (*bytesRead != fileRecord->size) throw std::exception();
+    size_t bytesRead = pImpl->readData(*fileRecord, buffer.get(), fileRecord->size);
+    if (bytesRead != fileRecord->size) throw std::exception();
+
+    if (pBytesRead)
+        *pBytesRead = bytesRead;
     
     return buffer;
 }
@@ -474,6 +540,7 @@ std::unique_ptr<Stream> ResourcesManager::getStream(const std::string& filename)
     
     StreamRecord streamRecord;
     streamRecord.fileRecord = fileRecord;
+    streamRecord.randomValue = arc4random();
     
     switch (fileRecord->fileType) {
         case RegularFile:
@@ -496,18 +563,27 @@ std::unique_ptr<Stream> ResourcesManager::getStream(const std::string& filename)
         }
     }
     
-    auto returnPair = pImpl->openStreams.insert(streamRecord);
+    auto insertResult = pImpl->openStreams.insert(std::make_pair(streamRecord.randomValue, streamRecord));
     
-    return std::unique_ptr<Stream>(new Stream(reinterpret_cast<int>(&*returnPair.first)));
+    if (!insertResult.second) {
+        throw std::exception();
+    }
+    
+    return std::unique_ptr<Stream>(new Stream(reinterpret_cast<int>(streamRecord.randomValue)));
+}
+
+StreamRecord* ResourcesManagerImpl::getStreamRecord(int handle) {
+    auto it = openStreams.find(handle);
+    if (it == openStreams.end()) return nullptr;
+    
+    return &it->second;
 }
 
 size_t ResourcesManager::readData(int handle, void* buffer, int size) {
+    StreamRecord* streamRecord = pImpl->getStreamRecord(handle);
+    if (!streamRecord) return 0;
     
-    StreamRecord* streamRecord = reinterpret_cast<StreamRecord*>(handle);
-    
-    if (pImpl->openStreams.count(*streamRecord) == 0) return 0;
-    
-    int ret;
+    int ret = 0;
     switch (streamRecord->fileRecord->fileType) {
         case RegularFile:
             ret = fread(buffer, 1, size, streamRecord->file);
@@ -523,26 +599,75 @@ size_t ResourcesManager::readData(int handle, void* buffer, int size) {
 }
 
 int ResourcesManager::closeFile(int handle) {
-    StreamRecord* streamRecord = reinterpret_cast<StreamRecord*>(handle);
-    
-    if (pImpl->openStreams.count(*streamRecord) == 0) return 0;
+    StreamRecord* streamRecord = pImpl->getStreamRecord(handle);
+    if (!streamRecord) return 0;
     
     int ret = 0;
     
     switch (streamRecord->fileRecord->fileType) {
         case RegularFile:
+            if (!streamRecord->file) {
+                break;
+            }
+
             ret = fclose(streamRecord->file);
+            streamRecord->file = NULL;
             break;
             
         case CompressedFile:
         case StoredFile: {
+            if (!streamRecord->zipFile) {
+                break;
+            }
+                
             unzCloseCurrentFile(streamRecord->zipFile);
             unzClose(streamRecord->zipFile);
+            streamRecord->zipFile = NULL;
             break;
         }
     }
     
-    pImpl->openStreams.erase(*streamRecord);
+    pImpl->openStreams.erase(streamRecord->randomValue);
+    
+    return ret;
+}
+
+int ResourcesManager::seek (int handle, long int offset, int whence) {
+    StreamRecord* streamRecord = pImpl->getStreamRecord(handle);
+    if (!streamRecord) return 0;
+
+    int ret = 0;
+    
+    switch (streamRecord->fileRecord->fileType) {
+        case RegularFile:
+            ret = fseek(streamRecord->file, offset, whence);
+            break;
+            
+        case CompressedFile:
+        case StoredFile: {
+            throw std::exception();
+        }
+    }
+    
+    return ret;
+}
+
+long int ResourcesManager::tell(int handle) {
+    StreamRecord* streamRecord = pImpl->getStreamRecord(handle);
+    if (!streamRecord) return 0;
+    
+    int ret = 0;
+    
+    switch (streamRecord->fileRecord->fileType) {
+        case RegularFile:
+            ret = ftell(streamRecord->file);
+            break;
+            
+        case CompressedFile:
+        case StoredFile: {
+            throw std::exception();
+        }
+    }
     
     return ret;
 }
@@ -569,6 +694,14 @@ Stream::~Stream() {
 
 size_t Stream::readData(void* buffer, int size) {
     return ResourcesManager::sharedManager()->readData(pImpl->handle, buffer, size);
+}
+
+int Stream::seek (long int offset, int whence) {
+    return ResourcesManager::sharedManager()->seek(pImpl->handle, offset, whence);
+}
+
+long int Stream::tell() {
+    return ResourcesManager::sharedManager()->tell(pImpl->handle);
 }
 
 std::unique_ptr<char[]> Stream::readData(size_t* bytesRead) {

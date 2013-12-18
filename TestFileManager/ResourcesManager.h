@@ -22,6 +22,8 @@ public:
     
     void reset();
     
+    void enableTrace(bool enableTrace);
+    
     void addRootFolder(const std::string& rootFolder);
     void addArchive(const std::string& archivePath, const std::string& rootFolder = "");
     void addLanguageFolder(const std::string& languageId, const std::string& languageFolder);
@@ -32,6 +34,7 @@ public:
     void setSearchByRelativePaths(bool searchByRelativePaths);
     void addSearchRoot(const std::string& searchRoot);
     
+    bool exists(const std::string& filename);
     size_t getSize(const std::string& filename);
     size_t readData(const std::string& filename, void* buffer, int size);
     std::unique_ptr<char[]> readData(const std::string& filename, size_t* bytesRead);
@@ -44,6 +47,8 @@ private:
 //    int openFile(const std::string& filename);
     size_t readData(int handle, void* buffer, int size);
     int closeFile(int handle);
+    int seek (int handle, long int offset, int whence);
+    long int tell(int handle);
     
     ResourcesManager();
     ResourcesManager(const ResourcesManager &);
@@ -61,6 +66,9 @@ public:
 
     size_t readData(void* buffer, int size);
     std::unique_ptr<char[]> readData(size_t* bytesRead);
+
+    int seek (long int offset, int whence);
+    long int tell();
 
 private:
     Stream();

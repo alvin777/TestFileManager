@@ -33,14 +33,14 @@ NSString *BufferToString(const char* buffer, size_t size) {
     [super tearDown];
 }
 
-//- (void)testFileExists
-//{
-//    ResourcesManager::sharedManager()->addRootFolder([[[NSBundle mainBundle] resourcePath] UTF8String]);
-//    
-//    
-//    STAssertTrue(ResourcesManager::sharedManager()->exists("test.txt"), @"");
-//    STAssertFalse(ResourcesManager::sharedManager()->exists("non-exising-filename"), @"");
-//}
+- (void)testFileExists
+{
+    ResourcesManager::sharedManager()->addRootFolder([[[NSBundle mainBundle] resourcePath] UTF8String]);
+    
+    
+    STAssertTrue(ResourcesManager::sharedManager()->exists("test.txt"), @"");
+    STAssertFalse(ResourcesManager::sharedManager()->exists("non-exising-filename"), @"");
+}
 
 - (void)testReadFile
 {
@@ -152,6 +152,8 @@ NSString *BufferToString(const char* buffer, size_t size) {
 
 - (void)testCategoryFile
 {
+    ResourcesManager::sharedManager()->enableTrace(true);
+
     ResourcesManager::sharedManager()->addCategoryFolder("small-screen", "small-screen");
     ResourcesManager::sharedManager()->addCategoryFolder("large-screen", "large-screen");
     ResourcesManager::sharedManager()->addRootFolder([[[[NSBundle mainBundle] resourcePath] stringByAppendingPathComponent:@"category_res"] UTF8String]);
@@ -214,7 +216,6 @@ NSString *BufferToString(const char* buffer, size_t size) {
     bytesRead = stream->readData(&buffer, 2);
     STAssertEquals(bytesRead, 2, @"");
     STAssertEqualObjects(@(buffer), @"st", @"");
-                                 
 }
 
 - (void)testReadCompressedFileStream
@@ -279,5 +280,31 @@ NSString *BufferToString(const char* buffer, size_t size) {
     
     ResourcesManager::sharedManager()->readData("test.txt", &bytesRead);
     STAssertEquals(bytesRead, (size_t)0, @"");
+}
+
+- (void)testStreamSeekTell
+{
+    ResourcesManager::sharedManager()->addRootFolder([[[NSBundle mainBundle] resourcePath] UTF8String]);
+    
+    auto stream = ResourcesManager::sharedManager()->getStream("test.txt");
+    
+    char buffer[3] = {0};
+    int bytesRead = stream->readData(&buffer, 2);
+    STAssertEquals(bytesRead, 2, @"");
+    STAssertEquals(stream->tell(), 2L, @"");
+    STAssertEqualObjects(@(buffer), @"te", @"");
+    
+    bytesRead = stream->readData(&buffer, 2);
+    STAssertEquals(bytesRead, 2, @"");
+    STAssertEquals(stream->tell(), 4L, @"");
+    STAssertEqualObjects(@(buffer), @"st", @"");
+    
+    stream->seek(1, SEEK_SET);
+    STAssertEquals(stream->tell(), 1L, @"");
+    
+    bytesRead = stream->readData(&buffer, 2);
+    STAssertEquals(bytesRead, 2, @"");
+    STAssertEquals(stream->tell(), 3L, @"");
+    STAssertEqualObjects(@(buffer), @"es", @"");
 }
 @end
