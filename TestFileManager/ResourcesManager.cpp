@@ -81,7 +81,7 @@ private:
     std::vector<std::string> searchRootsList;
     
     // methods    
-    void addFolderRecursive(const std::string& folder, const std::string& relativeFolder, const std::string& relativeFolderInMap, const std::string& languageId, const std::string& category);
+    void addFolderRecursive(const std::string& folder, const std::string& relativeFolder);
     
     size_t readData(const FileRecord& fileRecord, void* buffer, int size);
     size_t readDataFromRegularFile(const std::string& filePath, void* buffer, int size);
@@ -203,7 +203,7 @@ void ResourcesManager::enableTrace(bool enableTrace) {
 
 void ResourcesManager::addRootFolder(const std::string& rootFolder) {
     pImpl->rootFoldersList.push_back(rootFolder);
-    pImpl->addFolderRecursive(rootFolder, "", "", "", "");
+    pImpl->addFolderRecursive(rootFolder, "");
 }
 
 void ResourcesManager::addLanguageFolder(const std::string& languageId, const std::string& languageFolder) {
@@ -255,7 +255,7 @@ void ResourcesManager::addSearchRoot(const std::string& searchRoot) {
 // filesystem methods
 //
 
-void ResourcesManagerImpl::addFolderRecursive(const std::string& rootFolder, const std::string& relativeFolder, const std::string& relativeFolderInMap, const std::string& languageId, const std::string& category) {
+void ResourcesManagerImpl::addFolderRecursive(const std::string& rootFolder, const std::string& relativeFolder) {
     
     DIR *dp = opendir(combine({rootFolder, relativeFolder}).c_str());
     if (!dp) return;
@@ -266,27 +266,7 @@ void ResourcesManagerImpl::addFolderRecursive(const std::string& rootFolder, con
         
         if (ep->d_type == DT_DIR) {
             std::string newRelativeFolder = combine({relativeFolder, ep->d_name});
-            
-//            std::string newLanguageId;
-//            auto it = relativeFolderToLanguageIdMap.find(newRelativeFolder);
-//            if (it != relativeFolderToLanguageIdMap.end()) {
-//                newLanguageId = it->second;
-//            } else {
-//                newLanguageId = languageId;
-//            }
-//
-//            std::string newCategory;
-//            std::string newRelativeFolderInMap;
-//            it = relativeFolderToCategoryMap.find(ep->d_name);
-//            if (it != relativeFolderToCategoryMap.end()) {
-//                newCategory = it->second;
-//                newRelativeFolderInMap = relativeFolderInMap;
-//            } else {
-//                newCategory = category;
-//                newRelativeFolderInMap = combine({relativeFolderInMap, ep->d_name});;
-//            }
-
-            addFolderRecursive(rootFolder, newRelativeFolder, newRelativeFolder, "", "");
+            addFolderRecursive(rootFolder, newRelativeFolder);
         } else {
             FileRecord fileRecord;
             fileRecord.filename    = ep->d_name;
@@ -294,8 +274,6 @@ void ResourcesManagerImpl::addFolderRecursive(const std::string& rootFolder, con
             fileRecord.relativePath= combine({relativeFolder, ep->d_name});
             fileRecord.filePath    = combine({rootFolder, fileRecord.relativePath});
             fileRecord.size        = getFileSize(fileRecord.filePath);
-            fileRecord.languageId  = languageId;
-            fileRecord.category    = category;
             
             fileRecordList.push_back(fileRecord);
 
