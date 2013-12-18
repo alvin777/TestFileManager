@@ -52,9 +52,6 @@ struct StreamRecord {
     // zip
     unzFile zipFile;
     
-//    bool operator== (const StreamRecord& other) {
-//        return this == &other;
-//    }
     bool operator < (const StreamRecord& other) const {
         return randomValue < other.randomValue;
     }
@@ -69,7 +66,11 @@ private:
     bool enableTrace;
     
     std::vector<std::string> rootFoldersList;
-    std::map<std::string, FileRecordList> filenameToRecordMap;
+    
+    FileRecordList fileRecordList;
+    std::map<std::string, FileRecord*> fileRecordIndex;
+    
+    bool shouldRebuildIndex;
     std::string languageId;
     std::map<std::string, std::string> relativeFolderToLanguageIdMap;
     std::map<std::string, std::string> relativeFolderToCategoryMap;
@@ -79,6 +80,7 @@ private:
     bool searchByRelativePaths;
     std::vector<std::string> searchRootsList;
     
+    // methods    
     void addFolderRecursive(const std::string& folder, const std::string& relativeFolder, const std::string& relativeFolderInMap, const std::string& languageId, const std::string& category);
     
     size_t readData(const FileRecord& fileRecord, void* buffer, int size);
@@ -87,6 +89,7 @@ private:
     
     std::string makeKey(const std::string& filename);
     
+    void rebuildIndex();
     FileRecord* findFileRecord(const std::string& filename);
     StreamRecord* getStreamRecord(int handle);
     
@@ -182,8 +185,10 @@ ResourcesManager::ResourcesManager() :
 
 void ResourcesManager::reset() {
     pImpl->enableTrace = false;
+    pImpl->shouldRebuildIndex = false;
     pImpl->rootFoldersList.clear();
-    pImpl->filenameToRecordMap.clear();
+    pImpl->fileRecordList.clear();
+    pImpl->fileRecordIndex.clear();
     pImpl->languageId.clear();
     pImpl->relativeFolderToLanguageIdMap.clear();
     pImpl->relativeFolderToCategoryMap.clear();
@@ -203,31 +208,46 @@ void ResourcesManager::addRootFolder(const std::string& rootFolder) {
 
 void ResourcesManager::addLanguageFolder(const std::string& languageId, const std::string& languageFolder) {
     pImpl->relativeFolderToLanguageIdMap[languageFolder] = languageId;
+    
+    pImpl->shouldRebuildIndex = true;
 }
 
 void ResourcesManager::setCurrentLanguage(const std::string& languageId) {
     pImpl->languageId = languageId;
+    
+    pImpl->shouldRebuildIndex = true;
 }
 
 void ResourcesManager::addCategoryFolder(const std::string& category, const std::string& categoryFolder) {
     pImpl->relativeFolderToCategoryMap[categoryFolder] = category;
     
+    pImpl->shouldRebuildIndex = true;
 }
 void ResourcesManager::enableCategory(const std::string& category){
     pImpl->enabledCategories.insert(category);
+
+    pImpl->shouldRebuildIndex = true;
 }
 void ResourcesManager::disableCategory(const std::string& category) {
     pImpl->enabledCategories.erase(category);
+
+    pImpl->shouldRebuildIndex = true;
 }
 
 void ResourcesManager::setSearchByRelativePaths(bool searchByRelativePaths) {
-    pImpl->searchByRelativePaths = searchByRelativePaths;
+    if (searchByRelativePaths != pImpl->searchByRelativePaths) {
+        pImpl->searchByRelativePaths = searchByRelativePaths;
+
+        pImpl->shouldRebuildIndex = true;
+    }
 }
 
 void ResourcesManager::addSearchRoot(const std::string& searchRoot) {
     std::string canonicalSearchRoot = searchRoot;
     replaceAll(canonicalSearchRoot, "\\\\", "/");
     pImpl->searchRootsList.push_back(canonicalSearchRoot);
+
+    pImpl->shouldRebuildIndex = true;
 }
 
 
@@ -247,26 +267,26 @@ void ResourcesManagerImpl::addFolderRecursive(const std::string& rootFolder, con
         if (ep->d_type == DT_DIR) {
             std::string newRelativeFolder = combine({relativeFolder, ep->d_name});
             
-            std::string newLanguageId;
-            auto it = relativeFolderToLanguageIdMap.find(newRelativeFolder);
-            if (it != relativeFolderToLanguageIdMap.end()) {
-                newLanguageId = it->second;
-            } else {
-                newLanguageId = languageId;
-            }
+//            std::string newLanguageId;
+//            auto it = relativeFolderToLanguageIdMap.find(newRelativeFolder);
+//            if (it != relativeFolderToLanguageIdMap.end()) {
+//                newLanguageId = it->second;
+//            } else {
+//                newLanguageId = languageId;
+//            }
+//
+//            std::string newCategory;
+//            std::string newRelativeFolderInMap;
+//            it = relativeFolderToCategoryMap.find(ep->d_name);
+//            if (it != relativeFolderToCategoryMap.end()) {
+//                newCategory = it->second;
+//                newRelativeFolderInMap = relativeFolderInMap;
+//            } else {
+//                newCategory = category;
+//                newRelativeFolderInMap = combine({relativeFolderInMap, ep->d_name});;
+//            }
 
-            std::string newCategory;
-            std::string newRelativeFolderInMap;
-            it = relativeFolderToCategoryMap.find(ep->d_name);
-            if (it != relativeFolderToCategoryMap.end()) {
-                newCategory = it->second;
-                newRelativeFolderInMap = relativeFolderInMap;
-            } else {
-                newCategory = category;
-                newRelativeFolderInMap = combine({relativeFolderInMap, ep->d_name});;
-            }
-
-            addFolderRecursive(rootFolder, newRelativeFolder, newRelativeFolderInMap, newLanguageId, newCategory);
+            addFolderRecursive(rootFolder, newRelativeFolder, newRelativeFolder, "", "");
         } else {
             FileRecord fileRecord;
             fileRecord.filename    = ep->d_name;
@@ -277,12 +297,9 @@ void ResourcesManagerImpl::addFolderRecursive(const std::string& rootFolder, con
             fileRecord.languageId  = languageId;
             fileRecord.category    = category;
             
-            
-            std::string key = makeKey(combine({relativeFolderInMap, ep->d_name}));
-            filenameToRecordMap[key].push_back(fileRecord);
-            
-            if (enableTrace)
-                traceFileRecord(key, fileRecord);
+            fileRecordList.push_back(fileRecord);
+
+            shouldRebuildIndex = true;
         }
     }
     
@@ -321,9 +338,9 @@ void ResourcesManager::addArchive(const std::string& archivePath, const std::str
             ret = unzGetFilePos(zipFile, &zipFilePos);
             if (ret != UNZ_OK) throw std::exception();
             
-            if (pImpl->filenameToRecordMap.count(filePath) != 0) {
-                throw std::exception();
-            }
+//            if (pImpl->filenameToRecordMap.count(filePath) != 0) {
+//                throw std::exception();
+//            }
             
             // skip folders and files outside specified folder
             bool shouldAddRecord = true;
@@ -349,29 +366,10 @@ void ResourcesManager::addArchive(const std::string& archivePath, const std::str
                 fileRecord.size        = fileInfo.uncompressed_size;
                 fileRecord.zipFilePath = archivePath;
                 fileRecord.zipFilePos  = zipFilePos;
-                
-                // TODO: improve check by extracting required path components from file path
-                for (auto& folderLanguagePair : pImpl->relativeFolderToLanguageIdMap) {
-                    std::string pathPrefix = combine({rootFolder, folderLanguagePair.first});
-                    if (filePathString.compare(0, pathPrefix.size(), pathPrefix) == 0) {
-                        fileRecord.languageId = folderLanguagePair.second;
-                    }
-                }
+                pImpl->fileRecordList.push_back(fileRecord);
 
-                std::string relativePathInMap = fileRecord.relativePath;
-                for (auto& folderCategoryPair : pImpl->relativeFolderToCategoryMap) {
-                    std::string pathComponentToSearch = folderCategoryPair.first + "/";
-                    if (filePathString.find(pathComponentToSearch) != std::string::npos)
-                    {
-                        fileRecord.category = folderCategoryPair.second;
-                        replaceAll(relativePathInMap, pathComponentToSearch, "");
-                    }
-                }
-                std::string key = pImpl->makeKey(relativePathInMap);
-                pImpl->filenameToRecordMap[key].push_back(fileRecord);
+                pImpl->shouldRebuildIndex = true;
                 
-                if (pImpl->enableTrace)
-                    pImpl->traceFileRecord(key, fileRecord);
             }
             
             ret = unzGoToNextFile2(zipFile, &fileInfo, filePath, sizeof(filePath), NULL, 0, NULL, 0);
@@ -379,7 +377,7 @@ void ResourcesManager::addArchive(const std::string& archivePath, const std::str
             if (ret != UNZ_OK) throw std::exception();
 
         } while (ret != UNZ_END_OF_LIST_OF_FILE);
-        
+
     } catch (std::exception& e) {
         if (zipFile)
             unzClose(zipFile);
@@ -449,39 +447,86 @@ std::string ResourcesManagerImpl::makeKey(const std::string& filename) {
     return key;
 }
 
-FileRecord* ResourcesManagerImpl::findFileRecord(const std::string& filename) {
-    std::string key = makeKey(filename);
+void ResourcesManagerImpl::rebuildIndex() {
+    fileRecordIndex.clear();
     
-    std::set<FileRecord*, std::function<bool(FileRecord*, FileRecord*)>>
-        candidatesList([] (FileRecord* rec1, FileRecord* rec2) {
-            return rec1->category   > rec2->category ||
-                   rec1->languageId > rec2->languageId;
-    });
-
-    for (auto& searchRoot : searchRootsList) {
-        auto it = filenameToRecordMap.find(makeKey(combine({searchRoot, key})));
-        if (it == filenameToRecordMap.end()) continue;
-
-        // empty array (?)
-        if (it->second.size() == 0) continue;
-
-        // if language is not set - return non-specific file record
-        // if language is set return language-specific record if exists and non-specific otherwise
+    for (auto& fileRecord : fileRecordList) {
         
-        for (auto& fileRecord : it->second) {
-            if ((languageId.empty() || fileRecord.languageId == languageId) &&
-                (fileRecord.category.empty() || enabledCategories.count(fileRecord.category) > 0))
+//        for (auto& folderLanguagePair : relativeFolderToLanguageIdMap) {
+//            std::string pathPrefix = combine({rootFolder, folderLanguagePair.first});
+//            if (filePathString.compare(0, pathPrefix.size(), pathPrefix) == 0) {
+//                fileRecord.languageId = folderLanguagePair.second;
+//            }
+//        }
+        
+        bool skipRecord = false;
+        std::string relativePathInMap = fileRecord.relativePath;
+
+        for (auto& folderLanguageIdPair :  relativeFolderToLanguageIdMap) {
+            std::string pathComponentToSearch = folderLanguageIdPair.first + "/";
+            if (relativePathInMap.find(pathComponentToSearch) != std::string::npos)
             {
-                candidatesList.insert(&fileRecord);
+                if (languageId != folderLanguageIdPair.second) {
+                    skipRecord = true;
+                    break;
+                }
+                
+                fileRecord.languageId = folderLanguageIdPair.second;
+                replaceAll(relativePathInMap, pathComponentToSearch, "");
+            }
+        }
+
+        for (auto& folderCategoryPair :  relativeFolderToCategoryMap) {
+            std::string pathComponentToSearch = folderCategoryPair.first + "/";
+            if (relativePathInMap.find(pathComponentToSearch) != std::string::npos)
+            {
+                if (enabledCategories.count(folderCategoryPair.second) == 0) {
+                    skipRecord = true;
+                    break;
+                }
+                
+                fileRecord.category = folderCategoryPair.second;
+                replaceAll(relativePathInMap, pathComponentToSearch, "");
             }
         }
         
-        if (candidatesList.size()) break;
+        for (auto& searchRoot : searchRootsList) {
+            if (searchRoot.empty()) continue;
+            
+            std::string pathComponentToSearch = searchRoot + "/";
+            replaceAll(relativePathInMap, pathComponentToSearch, "");
+        }
+        
+        if (skipRecord) continue;
+        
+        std::string key = makeKey(relativePathInMap);
+        fileRecordIndex[key] = &fileRecord;
+        
+        if (enableTrace)
+            traceFileRecord(key, fileRecord);
     }
     
-    if (candidatesList.empty()) return nullptr;
+    shouldRebuildIndex = false;
+}
+
+void ResourcesManager::rebuildIndex() {
+    pImpl->rebuildIndex();
+}
+
+FileRecord* ResourcesManagerImpl::findFileRecord(const std::string& filename) {
     
-    return *candidatesList.begin();
+    if (shouldRebuildIndex) {
+        rebuildIndex();
+    }
+    
+    std::string key = makeKey(filename);
+    
+    auto it = fileRecordIndex.find(key);
+    if (it == fileRecordIndex.end()) {
+        return nullptr;
+    }
+    
+    return it->second;
 }
 
 bool ResourcesManager::exists(const std::string& filename) {

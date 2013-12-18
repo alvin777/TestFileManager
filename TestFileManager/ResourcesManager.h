@@ -26,6 +26,7 @@ public:
     
     void addRootFolder(const std::string& rootFolder);
     void addArchive(const std::string& archivePath, const std::string& rootFolder = "");
+    
     void addLanguageFolder(const std::string& languageId, const std::string& languageFolder);
     void addCategoryFolder(const std::string& category, const std::string& categoryFolder);
     void enableCategory(const std::string& category);
@@ -33,6 +34,8 @@ public:
     void setCurrentLanguage(const std::string& languageId);
     void setSearchByRelativePaths(bool searchByRelativePaths);
     void addSearchRoot(const std::string& searchRoot);
+    
+    void rebuildIndex();
     
     bool exists(const std::string& filename);
     size_t getSize(const std::string& filename);
