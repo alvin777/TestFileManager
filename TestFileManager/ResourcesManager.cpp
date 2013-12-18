@@ -80,11 +80,15 @@ private:
     bool searchByRelativePaths;
     std::vector<std::string> searchRootsList;
     
+    std::map<std::string, unzFile> sharedZipFiles;
+    
     // methods    
     void addFolderRecursive(const std::string& folder, const std::string& relativeFolder);
     
     size_t readData(const FileRecord& fileRecord, void* buffer, int size);
     size_t readDataFromRegularFile(const std::string& filePath, void* buffer, int size);
+    unzFile openSharedZip(const std::string& archivePath);
+    void closeSharedZip(const std::string& archivePath);
     size_t readDataFromCompressedFile(const FileRecord& fileRecord, void* buffer, int size);
     
     std::string makeKey(const std::string& filename);
@@ -303,101 +307,93 @@ size_t ResourcesManagerImpl::readDataFromRegularFile(const std::string& filePath
 // zip archive methods
 //
 
-void ResourcesManager::addArchive(const std::string& archivePath, const std::string& rootFolder /* = "" */) {
-    unzFile zipFile = nullptr;
-    
-    try {
+unzFile ResourcesManagerImpl::openSharedZip(const std::string& archivePath) {
+    auto it = sharedZipFiles.find(archivePath);
+    if (it == sharedZipFiles.end()) {
         unzFile zipFile = unzOpen(archivePath.c_str());
         if (!zipFile) throw std::exception();
-
-        char filePath[1024] = {0};
-        unz_file_info64 fileInfo;
-        int ret = unzGoToFirstFile2(zipFile, &fileInfo, filePath, sizeof(filePath), NULL, 0, NULL, 0);
-        if (ret != UNZ_OK) throw std::exception();
         
-        do {
-            unz_file_pos zipFilePos;
-            ret = unzGetFilePos(zipFile, &zipFilePos);
-            if (ret != UNZ_OK) throw std::exception();
-            
-//            if (pImpl->filenameToRecordMap.count(filePath) != 0) {
-//                throw std::exception();
-//            }
-            
-            // skip folders and files outside specified folder
-            bool shouldAddRecord = true;
-            std::string filePathString = filePath;
-            std::string slashEndedRootFolder = rootFolder + '/';
-            if (filePathString[filePathString.size()-1] == '/' ||
-                (!rootFolder.empty() &&
-                 filePathString.compare(0, slashEndedRootFolder.size(), slashEndedRootFolder) != 0)) {
-                shouldAddRecord = false; 
-            }
-            
-            if (shouldAddRecord) {
-                
-                std::string rootFolderRelativePath = filePathString;
-                if (!rootFolder.empty()) {
-                    rootFolderRelativePath = rootFolderRelativePath.substr(slashEndedRootFolder.size(), rootFolderRelativePath.size() - slashEndedRootFolder.size());
-                }
-                
-                FileRecord fileRecord;
-                fileRecord.filename    = filePathString;
-                fileRecord.relativePath= rootFolderRelativePath;
-                fileRecord.fileType    = CompressedFile;
-                fileRecord.size        = fileInfo.uncompressed_size;
-                fileRecord.zipFilePath = archivePath;
-                fileRecord.zipFilePos  = zipFilePos;
-                pImpl->fileRecordList.push_back(fileRecord);
-
-                pImpl->shouldRebuildIndex = true;
-                
-            }
-            
-            ret = unzGoToNextFile2(zipFile, &fileInfo, filePath, sizeof(filePath), NULL, 0, NULL, 0);
-            if (ret == UNZ_END_OF_LIST_OF_FILE) break;
-            if (ret != UNZ_OK) throw std::exception();
-
-        } while (ret != UNZ_END_OF_LIST_OF_FILE);
-
-    } catch (std::exception& e) {
-        if (zipFile)
-            unzClose(zipFile);
-        throw;
+        sharedZipFiles[archivePath] = zipFile;
+        return zipFile;
     }
+    
+    return it->second;
+}
+
+void ResourcesManagerImpl::closeSharedZip(const std::string& archivePath) {
+    auto it = sharedZipFiles.find(archivePath);
+    if (it == sharedZipFiles.end()) return;
+    
+    unzClose(it->second);
+    sharedZipFiles.erase(it);
+}
+
+void ResourcesManager::addArchive(const std::string& archivePath, const std::string& rootFolder /* = "" */) {
+    unzFile zipFile = pImpl->openSharedZip(archivePath);
+    if (!zipFile) throw std::exception();
+
+    char filePath[1024] = {0};
+    unz_file_info64 fileInfo;
+    int ret = unzGoToFirstFile2(zipFile, &fileInfo, filePath, sizeof(filePath), NULL, 0, NULL, 0);
+    if (ret != UNZ_OK) throw std::exception();
+    
+    do {
+        unz_file_pos zipFilePos;
+        ret = unzGetFilePos(zipFile, &zipFilePos);
+        if (ret != UNZ_OK) throw std::exception();
+                    
+        // skip folders and files outside specified folder
+        bool shouldAddRecord = true;
+        std::string filePathString = filePath;
+        std::string slashEndedRootFolder = rootFolder + '/';
+        if (filePathString[filePathString.size()-1] == '/' ||
+            (!rootFolder.empty() &&
+             filePathString.compare(0, slashEndedRootFolder.size(), slashEndedRootFolder) != 0)) {
+            shouldAddRecord = false; 
+        }
+        
+        if (shouldAddRecord) {
+            
+            std::string rootFolderRelativePath = filePathString;
+            if (!rootFolder.empty()) {
+                rootFolderRelativePath = rootFolderRelativePath.substr(slashEndedRootFolder.size(), rootFolderRelativePath.size() - slashEndedRootFolder.size());
+            }
+            
+            FileRecord fileRecord;
+            fileRecord.filename    = filePathString;
+            fileRecord.relativePath= rootFolderRelativePath;
+            fileRecord.fileType    = CompressedFile;
+            fileRecord.size        = fileInfo.uncompressed_size;
+            fileRecord.zipFilePath = archivePath;
+            fileRecord.zipFilePos  = zipFilePos;
+            pImpl->fileRecordList.push_back(fileRecord);
+
+            pImpl->shouldRebuildIndex = true;
+            
+        }
+        
+        ret = unzGoToNextFile2(zipFile, &fileInfo, filePath, sizeof(filePath), NULL, 0, NULL, 0);
+        if (ret == UNZ_END_OF_LIST_OF_FILE) break;
+        if (ret != UNZ_OK) throw std::exception();
+
+    } while (ret != UNZ_END_OF_LIST_OF_FILE);
 }
 
 size_t ResourcesManagerImpl::readDataFromCompressedFile(const FileRecord& fileRecord, void* buffer, int size) {
     
-    unzFile zipFile = nullptr;
-    try {
-        unzFile zipFile = unzOpen(fileRecord.zipFilePath.c_str());
-        if (!zipFile) throw std::exception();
-        
-        unz_file_pos file_pos = fileRecord.zipFilePos;
-        int ret = unzGoToFilePos(zipFile, &file_pos);
-        if (ret != UNZ_OK) throw std::exception();
-        
-        ret = unzOpenCurrentFile(zipFile);
-        if (ret != UNZ_OK) throw std::exception();
-        
-        ret = unzReadCurrentFile(zipFile, buffer, size);
-        if (ret < 0) throw std::exception();
-        
-        unzCloseCurrentFile(zipFile);
-        unzClose(zipFile);
-
-        return ret;
-    } catch (std::exception& e) {
-        
-        if (zipFile) {
-            unzCloseCurrentFile(zipFile);
-            unzClose(zipFile);
-        }
-        throw;
-    }
+    unzFile zipFile = openSharedZip(fileRecord.zipFilePath); 
+    if (!zipFile) throw std::exception();
     
-    return 0;
+    unz_file_pos file_pos = fileRecord.zipFilePos;
+    int ret = unzGoToFilePos(zipFile, &file_pos);
+    if (ret != UNZ_OK) throw std::exception();
+    
+    ret = unzOpenCurrentFile(zipFile);
+    if (ret != UNZ_OK) throw std::exception();
+    
+    ret = unzReadCurrentFile(zipFile, buffer, size);
+    if (ret < 0) throw std::exception();
+    return (ret == 0) ? size : ret;
 }
 
 //
@@ -432,6 +428,26 @@ std::string ResourcesManagerImpl::makeKey(const std::string& filename) {
 void ResourcesManagerImpl::rebuildIndex() {
     fileRecordIndex.clear();
     
+    // prepare lowercase dictionaries
+    decltype(relativeFolderToCategoryMap) lowercaseFolderToCategoryMap;
+    for (auto& folderCategoryPair : relativeFolderToCategoryMap) {
+        std::string relativePath = folderCategoryPair.first;
+        lowercase(relativePath);
+        
+        lowercaseFolderToCategoryMap[relativePath + "/"] = folderCategoryPair.second;
+    }
+    
+    decltype(searchRootsList) lowercaseSearchRootsList;
+    for (auto searchRoot : searchRootsList) {
+        if (searchRoot.empty()) continue;
+        
+        lowercase(searchRoot);
+        replaceAll(searchRoot, "\\\\", "/");
+
+        lowercaseSearchRootsList.push_back(searchRoot + "/");
+    }
+    
+    
     for (auto& fileRecord : fileRecordList) {
         bool skipRecord = false;
         std::string relativePathInMap = fileRecord.relativePath;
@@ -454,11 +470,8 @@ void ResourcesManagerImpl::rebuildIndex() {
         if (skipRecord) continue;
 
 
-        for (auto& folderCategoryPair :  relativeFolderToCategoryMap) {
-            std::string pathComponentToSearch = folderCategoryPair.first + "/";
-            lowercase(pathComponentToSearch);
-
-            if (relativePathInMap.find(pathComponentToSearch) != std::string::npos)
+        for (auto& folderCategoryPair :  lowercaseFolderToCategoryMap) {
+            if (relativePathInMap.find(folderCategoryPair.first) != std::string::npos)
             {
                 if (enabledCategories.count(folderCategoryPair.second) == 0) {
                     skipRecord = true;
@@ -466,7 +479,7 @@ void ResourcesManagerImpl::rebuildIndex() {
                 }
                 
                 fileRecord.category = folderCategoryPair.second;
-                replaceAll(relativePathInMap, pathComponentToSearch, "");
+                replaceAll(relativePathInMap, folderCategoryPair.first, "");
             }
         }
         
@@ -480,16 +493,12 @@ void ResourcesManagerImpl::rebuildIndex() {
             traceFileRecord(key, fileRecord);
 
         
-        for (auto& searchRoot : searchRootsList) {
+        for (auto& searchRoot : lowercaseSearchRootsList) {
             if (searchRoot.empty()) continue;
             
-            std::string pathComponentToSearch = searchRoot + "/";
-            lowercase(pathComponentToSearch);
-            replaceAll(pathComponentToSearch, "\\\\", "/");
-            
-            if (relativePathInMap.compare(0, pathComponentToSearch.size(), pathComponentToSearch) == 0) {
+            if (relativePathInMap.compare(0, searchRoot.size(), searchRoot) == 0) {
                 
-                std::string searchRootRelativePath = relativePathInMap.substr(pathComponentToSearch.size());
+                std::string searchRootRelativePath = relativePathInMap.substr(searchRoot.size());
                 
                 std::string key = makeKey(searchRootRelativePath);
                 fileRecordIndex[key] = &fileRecord;
@@ -580,6 +589,8 @@ std::unique_ptr<Stream> ResourcesManager::getStream(const std::string& filename)
     StreamRecord streamRecord;
     streamRecord.fileRecord = fileRecord;
     streamRecord.randomValue = arc4random();
+    streamRecord.file = NULL;
+    streamRecord.zipFile = NULL;
     
     switch (fileRecord->fileType) {
         case RegularFile:
@@ -590,14 +601,7 @@ std::unique_ptr<Stream> ResourcesManager::getStream(const std::string& filename)
         case CompressedFile:
         case StoredFile:
         {
-            streamRecord.zipFile = unzOpen(fileRecord->zipFilePath.c_str());
-            if (!streamRecord.zipFile) throw std::exception();
-            
-            int ret = unzGoToFilePos(streamRecord.zipFile, &fileRecord->zipFilePos);
-            if (ret != UNZ_OK) throw std::exception();
-
-            ret = unzOpenCurrentFile(streamRecord.zipFile);
-            if (ret != UNZ_OK) throw std::exception();
+            // lazy open
             break;
         }
     }
@@ -630,8 +634,27 @@ size_t ResourcesManager::readData(int handle, void* buffer, int size) {
             
         case CompressedFile:
         case StoredFile:
-            ret = unzReadCurrentFile(streamRecord->zipFile, buffer, size);
-            break;
+        {
+            if (size == streamRecord->fileRecord->size) {
+                return pImpl->readDataFromCompressedFile(*streamRecord->fileRecord, buffer, size);
+            }
+            
+            // lazy open
+            if (!streamRecord->zipFile) {
+                streamRecord->zipFile = unzOpen(streamRecord->fileRecord->zipFilePath.c_str());
+                if (!streamRecord->zipFile) throw std::exception();
+                
+                int ret = unzGoToFilePos(streamRecord->zipFile, &streamRecord->fileRecord->zipFilePos);
+                if (ret != UNZ_OK) throw std::exception();
+                
+                ret = unzOpenCurrentFile(streamRecord->zipFile);
+                if (ret != UNZ_OK) throw std::exception();
+            }
+            
+            int unzRet = unzReadCurrentFile(streamRecord->zipFile, buffer, size);
+            if (unzRet < 0) throw std::exception();
+            return (unzRet == 0) ? size : unzRet;
+        }
     }
     
     return ret;
@@ -658,8 +681,6 @@ int ResourcesManager::closeFile(int handle) {
             if (!streamRecord->zipFile) {
                 break;
             }
-                
-            unzCloseCurrentFile(streamRecord->zipFile);
             unzClose(streamRecord->zipFile);
             streamRecord->zipFile = NULL;
             break;

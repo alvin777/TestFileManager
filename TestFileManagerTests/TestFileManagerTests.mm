@@ -307,4 +307,32 @@ NSString *BufferToString(const char* buffer, size_t size) {
     STAssertEquals(stream->tell(), 3L, @"");
     STAssertEqualObjects(@(buffer), @"es", @"");
 }
+
+- (void)testConcurrentZipStreams
+{
+    ResourcesManager::sharedManager()->addArchive([[[NSBundle mainBundle] pathForResource:@"test" ofType:@"zip"] UTF8String]);
+    
+    auto stream1 = ResourcesManager::sharedManager()->getStream("test.txt");
+    auto stream2 = ResourcesManager::sharedManager()->getStream("test.txt");
+    
+    char buffer[4] = {0};
+    int bytesRead = stream1->readData(&buffer, 2);
+    STAssertEquals(bytesRead, 2, @"");
+    STAssertEqualObjects(@(buffer), @"te", @"");
+    
+    memset(buffer, 0, sizeof(buffer));
+    bytesRead = stream2->readData(&buffer, 1);
+    STAssertEquals(bytesRead, 1, @"");
+    STAssertEqualObjects(@(buffer), @"t", @"");
+    
+    memset(buffer, 0, sizeof(buffer));
+    bytesRead = stream1->readData(&buffer, 2);
+    STAssertEquals(bytesRead, 2, @"");
+    STAssertEqualObjects(@(buffer), @"st", @"");
+    
+    memset(buffer, 0, sizeof(buffer));
+    bytesRead = stream2->readData(&buffer, 3);
+    STAssertEquals(bytesRead, 3, @"");
+    STAssertEqualObjects(@(buffer), @"est", @"");
+}
 @end
