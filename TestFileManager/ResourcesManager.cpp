@@ -89,6 +89,8 @@ private:
     size_t readDataFromRegularFile(const std::string& filePath, void* buffer, int size);
     unzFile openSharedZip(const std::string& archivePath);
     void closeSharedZip(const std::string& archivePath);
+    
+    void checkZipFileOpened(StreamRecord* streamRecord);
     size_t readDataFromCompressedFile(const FileRecord& fileRecord, void* buffer, int size);
     
     std::string makeKey(const std::string& filename);
@@ -362,7 +364,7 @@ void ResourcesManager::addArchive(const std::string& archivePath, const std::str
             FileRecord fileRecord;
             fileRecord.filename    = filePathString;
             fileRecord.relativePath= rootFolderRelativePath;
-            fileRecord.fileType    = CompressedFile;
+            fileRecord.fileType    = (fileInfo.compression_method == 0) ? StoredFile : CompressedFile;
             fileRecord.size        = fileInfo.uncompressed_size;
             fileRecord.zipFilePath = archivePath;
             fileRecord.zipFilePos  = zipFilePos;
@@ -394,6 +396,19 @@ size_t ResourcesManagerImpl::readDataFromCompressedFile(const FileRecord& fileRe
     ret = unzReadCurrentFile(zipFile, buffer, size);
     if (ret < 0) throw std::exception();
     return (ret == 0) ? size : ret;
+}
+
+void ResourcesManagerImpl::checkZipFileOpened(StreamRecord* streamRecord) {
+    if (!streamRecord->zipFile) {
+        streamRecord->zipFile = unzOpen(streamRecord->fileRecord->zipFilePath.c_str());
+        if (!streamRecord->zipFile) throw std::exception();
+        
+        int ret = unzGoToFilePos(streamRecord->zipFile, &streamRecord->fileRecord->zipFilePos);
+        if (ret != UNZ_OK) throw std::exception();
+        
+        ret = unzOpenCurrentFile(streamRecord->zipFile);
+        if (ret != UNZ_OK) throw std::exception();
+    }
 }
 
 //
@@ -640,16 +655,7 @@ size_t ResourcesManager::readData(int handle, void* buffer, int size) {
             }
             
             // lazy open
-            if (!streamRecord->zipFile) {
-                streamRecord->zipFile = unzOpen(streamRecord->fileRecord->zipFilePath.c_str());
-                if (!streamRecord->zipFile) throw std::exception();
-                
-                int ret = unzGoToFilePos(streamRecord->zipFile, &streamRecord->fileRecord->zipFilePos);
-                if (ret != UNZ_OK) throw std::exception();
-                
-                ret = unzOpenCurrentFile(streamRecord->zipFile);
-                if (ret != UNZ_OK) throw std::exception();
-            }
+            pImpl->checkZipFileOpened(streamRecord);
             
             int unzRet = unzReadCurrentFile(streamRecord->zipFile, buffer, size);
             if (unzRet < 0) throw std::exception();
@@ -704,9 +710,20 @@ int ResourcesManager::seek (int handle, long int offset, int whence) {
             break;
             
         case CompressedFile:
-        case StoredFile: {
             throw std::exception();
+        case StoredFile: {
+            pImpl->checkZipFileOpened(streamRecord);
+            
+            switch (whence) {
+                case SEEK_SET:
+                    break;
+                case SEEK_CUR:
+                    break;
+                case SEEK_END:
+                    break;
+            }
         }
+            
     }
     
     return ret;

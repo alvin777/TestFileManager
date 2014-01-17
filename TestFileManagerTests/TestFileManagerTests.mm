@@ -335,4 +335,31 @@ NSString *BufferToString(const char* buffer, size_t size) {
     STAssertEquals(bytesRead, 3, @"");
     STAssertEqualObjects(@(buffer), @"est", @"");
 }
+
+- (void)testStoredStreamSeekTell
+{
+    ResourcesManager::sharedManager()->addArchive([[[NSBundle mainBundle] pathForResource:@"test_stored" ofType:@"zip"] UTF8String]);
+    
+    auto stream = ResourcesManager::sharedManager()->getStream("test.txt");
+    
+    char buffer[3] = {0};
+    int bytesRead = stream->readData(&buffer, 2);
+    STAssertEquals(bytesRead, 2, @"");
+    STAssertEquals(stream->tell(), 2L, @"");
+    STAssertEqualObjects(@(buffer), @"te", @"");
+    
+    bytesRead = stream->readData(&buffer, 2);
+    STAssertEquals(bytesRead, 2, @"");
+    STAssertEquals(stream->tell(), 4L, @"");
+    STAssertEqualObjects(@(buffer), @"st", @"");
+    
+    stream->seek(1, SEEK_SET);
+    STAssertEquals(stream->tell(), 1L, @"");
+    
+    bytesRead = stream->readData(&buffer, 2);
+    STAssertEquals(bytesRead, 2, @"");
+    STAssertEquals(stream->tell(), 3L, @"");
+    STAssertEqualObjects(@(buffer), @"es", @"");
+
+}
 @end
